@@ -122,4 +122,11 @@ template <size_t Dim>
 struct EnergyDensity : db::SimpleTag {
   using type = Scalar<DataVector>;
 };
+
+// MD
+template <size_t Dim>
+struct MomentumDensity : db::SimpleTag {
+  using type = tnsr::i<DataVector, Dim, Frame::Inertial>;
+};
+
 }  // namespace ScalarWave::Tags
