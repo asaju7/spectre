@@ -26,9 +26,8 @@ void test_compute_item_in_databox(const DataType& used_for_size) {
   MAKE_GENERATOR(generator);
   std::uniform_real_distribution<> dist(-1., 1.);
 
-  const tnsr::i<DataVector, SpatialDim, Frame::Inertial> pi =
-      make_with_random_values<tnsr::i<DataVector, SpatialDim, Frame::Inertial>>(
-          make_not_null(&generator), dist, used_for_size);
+  const Scalar<DataVector> pi = make_with_random_values<Scalar<DataVector>>(
+      make_not_null(&generator), dist, used_for_size);
   const tnsr::i<DataVector, SpatialDim, Frame::Inertial> phi =
       make_with_random_values<tnsr::i<DataVector, SpatialDim, Frame::Inertial>>(
           make_not_null(&generator), dist, used_for_size);
@@ -63,7 +62,7 @@ SPECTRE_TEST_CASE("Unit.Evolution.Systems.ScalarWave.MomentumDensity",
       "Evolution/Systems/ScalarWave/");
 
   const DataVector used_for_size(5);
-  test_momentum_density(used_for_size);
+  test_momentum_density<1>(used_for_size);
   // test_momentum_density<2>(used_for_size);
   // test_momentum_density<3>(used_for_size);
 }
