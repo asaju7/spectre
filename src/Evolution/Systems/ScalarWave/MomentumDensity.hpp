@@ -31,11 +31,12 @@ namespace ScalarWave {
  */
 template <size_t SpatialDim>
 void momentum_density(
-    gsl::not_null<Scalar<DataVector>*> result, const Scalar<DataVector>& pi,
+    gsl::not_null<tnsr::i<DataVector, SpatialDim, Frame::Inertial>*> result,
+    const Scalar<DataVector>& pi,
     const tnsr::i<DataVector, SpatialDim, Frame::Inertial>& phi);
 
 template <size_t SpatialDim>
-Scalar<DataVector> momentum_density(
+tnsr::i<DataVector, SpatialDim, Frame::Inertial> momentum_density(
     const Scalar<DataVector>& pi,
     const tnsr::i<DataVector, SpatialDim, Frame::Inertial>& phi);
 /// @}
@@ -46,7 +47,7 @@ template <size_t SpatialDim>
 struct MomentumDensityCompute : MomentumDensity<SpatialDim>, db::ComputeTag {
   using argument_tags = tmpl::list<Pi, Phi<SpatialDim>>;
 
-  using return_type = Scalar<DataVector>;
+  using return_type = tnsr::i<DataVector, SpatialDim, Frame::Inertial>;
 
   static constexpr auto function = static_cast<void (*)(
       gsl::not_null<tnsr::i<DataVector, SpatialDim, Frame::Inertial>*> result,
