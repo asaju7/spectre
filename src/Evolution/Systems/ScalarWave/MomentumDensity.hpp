@@ -21,12 +21,12 @@ class not_null;
 namespace ScalarWave {
 /// @{
 /*!
- * \brief Computes the momentum density of the scalar wave system.
+ * \brief Computes the energy density of the scalar wave system.
  *
- * Below is the function used to calculate the momentum density.
+ * Below is the function used to calculate the energy density.
  *
  * \f{align*}
- * \epsilon = \frac{1}{2}\left( \Pi^{2} + \abs{\Phi}^{2} \right)
+ * \epsilon = \Pi * \Phi_i
  * \f}
  */
 template <size_t SpatialDim>

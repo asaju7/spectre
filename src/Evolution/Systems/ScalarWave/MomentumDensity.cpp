@@ -3,7 +3,6 @@
 
 #include "Evolution/Systems/ScalarWave/MomentumDensity.hpp"
 
-#include <iostream>
 #include "DataStructures/DataVector.hpp"
 #include "DataStructures/Tensor/EagerMath/DotProduct.hpp"
 #include "DataStructures/Tensor/Tensor.hpp"
@@ -17,7 +16,7 @@ void momentum_density(
     gsl::not_null<tnsr::i<DataVector, SpatialDim, Frame::Inertial>*> result,
     const Scalar<DataVector>& pi,
     const tnsr::i<DataVector, SpatialDim, Frame::Inertial>& phi) {
-  for (size_t i = 0; i < 3; i++) {
+  for (size_t i = 0; i < SpatialDim; i++) {
     *result->get(i) = get(pi) * phi.get(i);
   }
 }

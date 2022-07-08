@@ -7,7 +7,7 @@ import numpy as np
 
 
 def momentum_density(pi, phi):
-    return np.linalg.norm(pi) * np.linalg.norm(phi)
+    return pi * phi
 
 
 #End functions for testing MomentumDensity.cpp
