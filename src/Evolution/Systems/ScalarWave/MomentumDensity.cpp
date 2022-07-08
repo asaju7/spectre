@@ -13,11 +13,12 @@
 namespace ScalarWave {
 template <size_t SpatialDim>
 void momentum_density(
-
     gsl::not_null<tnsr::i<DataVector, SpatialDim, Frame::Inertial>*> result,
     const Scalar<DataVector>& pi,
     const tnsr::i<DataVector, SpatialDim, Frame::Inertial>& phi) {
-  result = (pi * phi);
+  for (size_t i = 0; i < 3; i++) {
+    result->get(i) = pi * phi.get(i);
+  }
 }
 
 template <size_t SpatialDim>
