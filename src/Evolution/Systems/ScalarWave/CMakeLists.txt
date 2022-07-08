@@ -13,6 +13,7 @@ spectre_target_sources(
   EnergyDensity.cpp
   MomentumDensity.cpp
   Equations.cpp
+  MomentumDensity.cpp
   TimeDerivative.cpp
   VolumeTermsInstantiation.cpp
   )
@@ -27,6 +28,7 @@ spectre_target_headers(
   MomentumDensity.hpp
   Equations.hpp
   Initialize.hpp
+  MomentumDensity.hpp
   System.hpp
   Tags.hpp
   TagsDeclarations.hpp
