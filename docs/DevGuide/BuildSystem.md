@@ -198,9 +198,9 @@ cmake -D FLAG1=OPT1 ... -D FLAGN=OPTN <SPECTRE_ROOT>
     the link flag `-tracemode summary`. (default is `OFF`)
 - CMAKE_BUILD_TYPE
   - Sets the build type.  Common options:
-    - `Debug` (the default if the flag is not specified): sets flags
+    - `Debug` : sets flags
       that trigger additional error checking
-    - `Release`
+    - `Release` (the default if the flag is not specified)
 - CMAKE_C_COMPILER
   - The `C` compiler used (defaults to whatever is determined by
     `CMake/Modules/CMakeDetermineCCompiler.cmake`, usually `cc`)
