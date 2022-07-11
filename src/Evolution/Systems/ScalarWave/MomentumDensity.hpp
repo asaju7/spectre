@@ -26,7 +26,7 @@ namespace ScalarWave {
  * Below is the function used to calculate the energy density.
  *
  * \f{align*}
- * \epsilon = \Pi * \Phi_i
+ * \epsilon_i = \Pi * \Phi_i
  * \f}
  */
 template <size_t SpatialDim>
