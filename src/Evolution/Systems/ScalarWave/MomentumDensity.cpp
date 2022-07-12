@@ -17,7 +17,7 @@ void momentum_density(
     const Scalar<DataVector>& pi,
     const tnsr::i<DataVector, SpatialDim, Frame::Inertial>& phi) {
   for (size_t i = 0; i < SpatialDim; i++) {
-    *result->get(i) = get(pi) * phi.get(i);
+    result->get(i) = get(pi) * phi.get(i);
   }
 }
 
