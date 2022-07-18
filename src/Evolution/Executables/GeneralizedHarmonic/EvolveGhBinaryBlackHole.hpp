@@ -101,6 +101,7 @@
 #include "ParallelAlgorithms/Interpolation/Actions/TryToInterpolate.hpp"
 #include "ParallelAlgorithms/Interpolation/Callbacks/ErrorOnFailedApparentHorizon.hpp"
 #include "ParallelAlgorithms/Interpolation/Callbacks/FindApparentHorizon.hpp"
+#include "ParallelAlgorithms/Interpolation/Callbacks/IgnoreFailedApparentHorizon.hpp"
 #include "ParallelAlgorithms/Interpolation/Callbacks/ObserveSurfaceData.hpp"
 #include "ParallelAlgorithms/Interpolation/Callbacks/ObserveTimeSeriesOnSurface.hpp"
 #include "ParallelAlgorithms/Interpolation/Events/Interpolate.hpp"
@@ -169,7 +170,7 @@ struct EvolutionMetavars {
   static constexpr dg::Formulation dg_formulation =
       dg::Formulation::StrongInertial;
   using temporal_id = Tags::TimeStepId;
-  static constexpr bool local_time_stepping = false;
+  static constexpr bool local_time_stepping = true;
   // Set override_functions_of_time to true to override the
   // 2nd or 3rd order piecewise polynomial functions of time using
   // `read_spec_piecewise_polynomial()`
@@ -200,7 +201,7 @@ struct EvolutionMetavars {
     using post_interpolation_callback =
         intrp::callbacks::FindApparentHorizon<AhA, ::Frame::Grid>;
     using horizon_find_failure_callback =
-        intrp::callbacks::ErrorOnFailedApparentHorizon;
+        intrp::callbacks::IgnoreFailedApparentHorizon;
     using post_horizon_find_callbacks = tmpl::list<
         intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe, AhA>,
         intrp::callbacks::ObserveSurfaceData<surface_tags_to_observe, AhA>,
@@ -221,7 +222,7 @@ struct EvolutionMetavars {
     using post_interpolation_callback =
         intrp::callbacks::FindApparentHorizon<AhB, ::Frame::Grid>;
     using horizon_find_failure_callback =
-        intrp::callbacks::ErrorOnFailedApparentHorizon;
+        intrp::callbacks::IgnoreFailedApparentHorizon;
     using post_horizon_find_callbacks = tmpl::list<
         intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe, AhB>,
         intrp::callbacks::ObserveSurfaceData<surface_tags_to_observe, AhB>,
@@ -364,9 +365,8 @@ struct EvolutionMetavars {
        Parallel::Phase::RegisterWithElementDataReader,
        Parallel::Phase::ImportInitialData,
        Parallel::Phase::InitializeInitialDataDependentQuantities,
-       Parallel::Phase::RegisterWithObserver,
-       Parallel::Phase::InitializeTimeStepperHistory, Parallel::Phase::Evolve,
-       Parallel::Phase::Exit}};
+       Parallel::Phase::Register, Parallel::Phase::InitializeTimeStepperHistory,
+       Parallel::Phase::Evolve, Parallel::Phase::Exit}};
 
   using step_actions = tmpl::list<
       evolution::dg::Actions::ComputeTimeDerivative<EvolutionMetavars>,
@@ -429,7 +429,7 @@ struct EvolutionMetavars {
           Parallel::PhaseActions<
               Parallel::Phase::InitializeInitialDataDependentQuantities,
               initialize_initial_data_dependent_quantities_actions>,
-          Parallel::PhaseActions<Parallel::Phase::RegisterWithObserver,
+          Parallel::PhaseActions<Parallel::Phase::Register,
                                  tmpl::list<dg_registration_list,
                                             Parallel::Actions::TerminatePhase>>,
           Parallel::PhaseActions<

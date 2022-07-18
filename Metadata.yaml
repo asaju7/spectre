@@ -9,13 +9,13 @@ Homepage: https://spectre-code.org
 
 GitHub: sxs-collaboration/spectre
 
-Version: 2022.06.14
+Version: 2022.07.18
 
-PublicationDate: 2022-06-14
+PublicationDate: 2022-07-18
 
-Doi: 10.5281/zenodo.6643787
+Doi: 10.5281/zenodo.6856873
 
-ZenodoId: 6643787
+ZenodoId: 6856873
 
 Description: |
   SpECTRE is an open-source code for multi-scale, multi-physics problems
@@ -302,6 +302,10 @@ Authors:
         Orcid: 0000-0003-0994-115X
         Affiliations: [*fullerton]
         GitHub: trami18
+      - Name: Ring, Noah
+        Orcid: 0000-0001-6510-4300
+        Affiliations: [*cornell]
+        GitHub: nring21
       - Name: Rüter, Hannes R.
         Orcid: 0000-0002-3442-5360
         Affiliations: [*coimbra]
@@ -322,3 +326,7 @@ Authors:
         Orcid: 0000-0003-0005-348X
         Affiliations: [*aei]
         GitHub: tomwlodarczyk
+      - Name: Wu, David
+        Orcid: 0000-0002-5287-4389
+        Affiliations: [*cornell]
+        GitHub: DavidWu421
