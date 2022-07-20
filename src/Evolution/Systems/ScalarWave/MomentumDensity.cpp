@@ -9,6 +9,7 @@
 #include "Utilities/ConstantExpressions.hpp"
 #include "Utilities/GenerateInstantiations.hpp"
 #include "Utilities/Gsl.hpp"
+#include <iostream>
 
 namespace ScalarWave {
 template <size_t SpatialDim>

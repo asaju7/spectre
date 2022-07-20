@@ -7,6 +7,7 @@ import numpy as np
 
 
 def momentum_density(pi, phi):
+    print(phi)
     return pi * phi
 
 

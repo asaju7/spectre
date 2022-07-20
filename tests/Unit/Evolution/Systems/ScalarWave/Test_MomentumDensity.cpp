@@ -16,6 +16,7 @@
 #include "Framework/SetupLocalPythonEnvironment.hpp"
 #include "Helpers/DataStructures/DataBox/TestHelpers.hpp"
 #include "Helpers/DataStructures/MakeWithRandomValues.hpp"
+#include <iostream>
 
 namespace {
 template <size_t SpatialDim, typename DataType>
