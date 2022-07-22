@@ -5,9 +5,13 @@ set(LIBRARY "PyVisualization")
 
 spectre_python_add_module(
   Visualization
+
   PYTHON_FILES
   __init__.py
   ApplyPointwise.py
+  
+  PYTHON_EXECUTABLES
+  ExtendConnectivity.py
   GenerateXdmf.py
   InterpolateToCoords.py
   InterpolateToMesh.py
