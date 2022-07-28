@@ -24,29 +24,75 @@
 // main module we just have it be empty
 extern "C" void CkRegisterMainModule(void) {}
 
-Mesh<3> generate_mesh(const h5::VolumeData& volume_file,
-                      const size_t& single_id, const size_t element_number) {
+std::pair<Mesh<3>, std::string> generate_mesh(const h5::VolumeData& volume_file,
+                                              const size_t& single_id,
+                                              const size_t element_number) {
   // MAKE SURE TO MAKE THE DIM GENERAL
   auto bases = volume_file.get_bases(single_id);
-  //   std::cout << bases.size() << "\n";
   std::array<Spectral::Basis, 3> basis_array = {
       Spectral::to_basis(bases[element_number][0]),
       Spectral::to_basis(bases[0][1]),
       Spectral::to_basis(bases[element_number][2])};
+  // std::cout << bases << '\n' << bases.size() << '\n';
 
   auto quadratures = volume_file.get_quadratures(single_id);
   std::array<Spectral::Quadrature, 3> quadrature_array = {
       Spectral::to_quadrature(quadratures[element_number][0]),
       Spectral::to_quadrature(quadratures[element_number][1]),
       Spectral::to_quadrature(quadratures[element_number][2])};
+  // std::cout << quadratures << '\n' << quadratures.size() << '\n';
 
   auto extents = volume_file.get_extents(single_id);
   std::array<size_t, 3> extents_array = {extents[element_number][0],
                                          extents[element_number][1],
                                          extents[element_number][2]};
+  // std::cout << extents << '\n' << extents.size() << '\n';
+
+  auto grid_names = volume_file.get_grid_names(single_id);
+  std::string grid_names_array = grid_names[element_number];
+  // std::cout << grid_names_array << '\n';
+  // std::cout << grid_names << '\n';
 
   std::cout << "Finished generate_mesh" << '\n';
-  return Mesh<3>{extents_array, basis_array, quadrature_array};
+  Mesh<3> element_mesh = Mesh<3>{extents_array, basis_array, quadrature_array};
+  std::pair<Mesh<3>, std::string> output(element_mesh, grid_names_array);
+  return output;
+}
+
+// Compute Block-logical coordinates
+tnsr::I<DataVector, 3, Frame::BlockLogical> block_logical_coords(
+    const tnsr::I<DataVector, 3, Frame::ElementLogical>& new_coords,
+    const std::string& element_id) {
+  std::string R_x_string(1, element_id[6]);  // HARDCODE
+  double R_x = std::stod(R_x_string);
+  std::string R_y_string(1, element_id[11]);  // HARDCODE
+  double R_y = std::stod(R_y_string);
+  std::string R_z_string(1, element_id[16]);  // HARDCODE
+  double R_z = std::stod(R_z_string);
+  double N_x = pow(2, R_x);
+  double N_y = pow(2, R_y);
+  double N_z = pow(2, R_z);
+  std::string index_x_string(1, element_id[8]);   // HARDCODE
+  std::string index_y_string(1, element_id[13]);  // HARDCODE
+  std::string index_z_string(1, element_id[18]);  // HARDCODE
+  int index_x = std::stoi(index_x_string);
+  int index_y = std::stoi(index_y_string);
+  int index_z = std::stoi(index_z_string);
+  double shift_x = (-1 + (2 * index_x + 1) / N_x);
+  double shift_y = (-1 + (2 * index_y + 1) / N_y);
+  double shift_z = (-1 + (2 * index_z + 1) / N_z);
+  DataVector block_logical_x = 1 / N_x * new_coords.get(0) + shift_x;
+  DataVector block_logical_y = 1 / N_y * new_coords.get(1) + shift_y;
+  DataVector block_logical_z = 1 / N_z * new_coords.get(2) + shift_z;
+  std::cout << element_id << '\n';
+  tnsr::I<DataVector, 3, Frame::BlockLogical> block_logical_coords{
+      block_logical_x.size(), 0.};
+  block_logical_coords.get(0) = block_logical_x;
+  block_logical_coords.get(1) = block_logical_y;
+  block_logical_coords.get(2) = block_logical_z;
+  std::cout << block_logical_coords << '\n';
+
+  return block_logical_coords;
 }
 
 // Functions that compute the connectivity within the block
@@ -127,7 +173,7 @@ std::vector<double> generate_new_connectivity(
   for (const std::tuple<double, double, double>& it : connectivity_of_tuples) {
     connectivity.push_back(grid_point_map[it]);
   }
-  std::cout << connectivity << '\n';
+  // std::cout << connectivity << '\n';
   std::cout << "Finished generate_new_connectivity" << '\n';
   return connectivity;
 }
@@ -142,14 +188,16 @@ void block_connectivity(const std::string& file_name,
   std::vector<double> new_connectivity;
   for (size_t i = 0; i < volume_file.get_bases(single_id).size(); ++i) {
     auto new_mesh = generate_mesh(volume_file, single_id, i);
-    auto new_coords = logical_coordinates(new_mesh);
+    auto new_coords = logical_coordinates(std::get<0>(new_mesh));
+    std::cout << new_coords << '\n';
+    std::cout << block_logical_coords(new_coords, std::get<1>(new_mesh))
+              << '\n';
     auto generated_connectivity = generate_new_connectivity(new_coords);
     new_connectivity.insert(new_connectivity.end(),
                             generated_connectivity.begin(),
                             generated_connectivity.end());
   }
-  //   std::cout << std::setprecision(16) << new_coords << "\n";
-  std::cout << new_connectivity << '\n';
+  // std::cout << new_connectivity << '\n';
 }
 
 // def extend_connectivity(input_file):
