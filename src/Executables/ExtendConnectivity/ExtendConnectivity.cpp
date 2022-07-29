@@ -24,54 +24,97 @@
 // main module we just have it be empty
 extern "C" void CkRegisterMainModule(void) {}
 
-std::pair<Mesh<3>, std::string> generate_mesh(const h5::VolumeData& volume_file,
-                                              const size_t& single_id,
-                                              const size_t element_number) {
+std::pair<size_t, std::tuple<int, int, int>>
+compute_expected_connectivity_length(const h5::VolumeData& volume_file,
+                                     const size_t& single_obs_id,
+                                     const size_t total_number_of_elements) {
+  size_t expected_connectivity_length = 0;
+
+  for (size_t i = 0; i < total_number_of_elements; ++i) {
+    auto extents = volume_file.get_extents(single_obs_id);
+    expected_connectivity_length +=
+        (extents[i][0] - 1) * (extents[i][1] - 1) * (extents[i][2] - 1) * 8;
+  }
+
+  std::string grid_name_string = volume_file.get_grid_names(single_obs_id)[0];
+
+  size_t h_ref_x_start_position = grid_name_string.find("L", 0);
+  size_t h_ref_y_start_position =
+      grid_name_string.find("L", h_ref_x_start_position + 1);
+  size_t h_ref_z_start_position =
+      grid_name_string.find("L", h_ref_y_start_position + 1);
+
+  size_t h_ref_x_end_position = grid_name_string.find("I", 0);
+  size_t h_ref_y_end_position =
+      grid_name_string.find("I", h_ref_x_end_position + 1);
+  size_t h_ref_z_end_position =
+      grid_name_string.find("I", h_ref_y_end_position + 1);
+
+  int h_ref_x = std::stoi(grid_name_string.substr(
+      h_ref_x_start_position + 1,
+      h_ref_x_end_position - h_ref_x_start_position - 1));
+  int h_ref_y = std::stoi(grid_name_string.substr(
+      h_ref_y_start_position + 1,
+      h_ref_y_end_position - h_ref_y_start_position - 1));
+  int h_ref_z = std::stoi(grid_name_string.substr(
+      h_ref_z_start_position + 1,
+      h_ref_z_end_position - h_ref_z_start_position - 1));
+
+  expected_connectivity_length +=
+      ((pow(2, h_ref_x + 1) - 1) * (pow(2, h_ref_y + 1) - 1) *
+           (pow(2, h_ref_z + 1) - 1) -
+       total_number_of_elements) *
+      8;
+
+  std::tuple<int, int, int> h_refinement_tuple{h_ref_x, h_ref_y, h_ref_z};
+
+  return std::pair{expected_connectivity_length, h_refinement_tuple};
+}
+
+std::pair<Mesh<3>, std::string> generate_element_properties(
+    const h5::VolumeData& volume_file, const size_t& single_obs_id,
+    const size_t element_number) {
   // MAKE SURE TO MAKE THE DIM GENERAL
-  auto bases = volume_file.get_bases(single_id);
+  auto bases = volume_file.get_bases(single_obs_id);
   std::array<Spectral::Basis, 3> basis_array = {
       Spectral::to_basis(bases[element_number][0]),
       Spectral::to_basis(bases[0][1]),
       Spectral::to_basis(bases[element_number][2])};
-  // std::cout << bases << '\n' << bases.size() << '\n';
 
-  auto quadratures = volume_file.get_quadratures(single_id);
+  auto quadratures = volume_file.get_quadratures(single_obs_id);
   std::array<Spectral::Quadrature, 3> quadrature_array = {
       Spectral::to_quadrature(quadratures[element_number][0]),
       Spectral::to_quadrature(quadratures[element_number][1]),
       Spectral::to_quadrature(quadratures[element_number][2])};
-  // std::cout << quadratures << '\n' << quadratures.size() << '\n';
 
-  auto extents = volume_file.get_extents(single_id);
+  auto extents = volume_file.get_extents(single_obs_id);
   std::array<size_t, 3> extents_array = {extents[element_number][0],
                                          extents[element_number][1],
                                          extents[element_number][2]};
-  // std::cout << extents << '\n' << extents.size() << '\n';
 
-  auto grid_names = volume_file.get_grid_names(single_id);
+  auto grid_names = volume_file.get_grid_names(single_obs_id);
   std::string grid_names_array = grid_names[element_number];
-  // std::cout << grid_names_array << '\n';
-  // std::cout << grid_names << '\n';
 
-  std::cout << "Finished generate_mesh" << '\n';
+  // Generates the mesh
   Mesh<3> element_mesh = Mesh<3>{extents_array, basis_array, quadrature_array};
-  std::pair<Mesh<3>, std::string> output(element_mesh, grid_names_array);
-  return output;
+
+  std::pair<Mesh<3>, std::string> element_properties(element_mesh,
+                                                     grid_names_array);
+  std::cout << "Finished generate_element_properties" << '\n';
+  return element_properties;
 }
 
 // Compute Block-logical coordinates
-tnsr::I<DataVector, 3, Frame::BlockLogical> block_logical_coords(
+const tnsr::I<DataVector, 3, Frame::BlockLogical>&
+generate_block_logical_coords(
     const tnsr::I<DataVector, 3, Frame::ElementLogical>& new_coords,
-    const std::string& element_id) {
-  std::string R_x_string(1, element_id[6]);  // HARDCODE
-  double R_x = std::stod(R_x_string);
-  std::string R_y_string(1, element_id[11]);  // HARDCODE
-  double R_y = std::stod(R_y_string);
-  std::string R_z_string(1, element_id[16]);  // HARDCODE
-  double R_z = std::stod(R_z_string);
-  double N_x = pow(2, R_x);
-  double N_y = pow(2, R_y);
-  double N_z = pow(2, R_z);
+    const std::string& element_id,
+    const std::tuple<int, int, int>& h_refinement_tuple) {
+  std::cout << "New coords get 0:\n" << new_coords.get(0) << "\n";
+  int N_x = pow(2, std::get<0>(h_refinement_tuple));
+  int N_y = pow(2, std::get<1>(h_refinement_tuple));
+  int N_z = pow(2, std::get<2>(h_refinement_tuple));
+
   std::string index_x_string(1, element_id[8]);   // HARDCODE
   std::string index_y_string(1, element_id[13]);  // HARDCODE
   std::string index_z_string(1, element_id[18]);  // HARDCODE
@@ -97,7 +140,7 @@ tnsr::I<DataVector, 3, Frame::BlockLogical> block_logical_coords(
 
 // Functions that compute the connectivity within the block
 std::map<std::tuple<double, double, double>, size_t> generate_grid_point_map(
-    const tnsr::I<DataVector, 3, Frame::ElementLogical>& coord_data) {
+    const tnsr::I<DataVector, 3, Frame::BlockLogical>& coord_data) {
   std::map<std::tuple<double, double, double>, size_t> grid_point_map;
   DataVector coord_data_x = coord_data.get(0);
   DataVector coord_data_y = coord_data.get(1);
@@ -158,7 +201,7 @@ std::vector<std::tuple<double, double, double>> build_connectivity_by_element(
 }
 
 std::vector<double> generate_new_connectivity(
-    tnsr::I<DataVector, 3, Frame::ElementLogical>& logical_coords) {
+    tnsr::I<DataVector, 3, Frame::BlockLogical>& logical_coords) {
   std::map<std::tuple<double, double, double>, size_t> grid_point_map =
       generate_grid_point_map(logical_coords);
   DataVector logical_coords_x = logical_coords.get(0);
@@ -183,21 +226,35 @@ void block_connectivity(const std::string& file_name,
   h5::H5File<h5::AccessType::ReadWrite> data_file(file_name, true);
   const auto& volume_file = data_file.get<h5::VolumeData>("/" + subfile_name);
   auto observation_ids = volume_file.list_observation_ids();
-  const auto& single_id =
+  const auto& single_obs_id =
       observation_ids[0];  // Hard coded for only 1 observation ID
-  std::vector<double> new_connectivity;
-  for (size_t i = 0; i < volume_file.get_bases(single_id).size(); ++i) {
-    auto new_mesh = generate_mesh(volume_file, single_id, i);
-    auto new_coords = logical_coordinates(std::get<0>(new_mesh));
-    std::cout << new_coords << '\n';
-    std::cout << block_logical_coords(new_coords, std::get<1>(new_mesh))
-              << '\n';
-    auto generated_connectivity = generate_new_connectivity(new_coords);
-    new_connectivity.insert(new_connectivity.end(),
-                            generated_connectivity.begin(),
-                            generated_connectivity.end());
+  size_t total_number_of_elements =
+      volume_file.get_bases(single_obs_id)
+          .size();  // Check this using grid_names for faster parsing?
+
+  auto [expected_connectivity_length, h_refinement_tuple] =
+      compute_expected_connectivity_length(volume_file, single_obs_id,
+                                           total_number_of_elements);
+  std::vector<size_t> new_connectivity;
+  new_connectivity.reserve(expected_connectivity_length);
+
+  std::cout << "Pre-for loop!\n";
+
+  for (size_t i = 0; i < volume_file.get_bases(single_obs_id).size(); ++i) {
+    auto [element_mesh, element_id] =
+        generate_element_properties(volume_file, single_obs_id, i);
+    std::cout << "About to run logical_coordinates\n";
+    auto element_logical_coords = logical_coordinates(element_mesh);
+    auto block_logical_coords = generate_block_logical_coords(
+        element_logical_coords, element_id, h_refinement_tuple);
   }
-  // std::cout << new_connectivity << '\n';
+  //   auto generated_connectivity =
+  //   generate_new_connectivity(block_logical_coords);
+  //   new_connectivity.insert(new_connectivity.end(),
+  //                           generated_connectivity.begin(),
+  //                           generated_connectivity.end());
+  std::cout << "Random text\n";
+  std::cout << new_connectivity << '\n';
 }
 
 // def extend_connectivity(input_file):
