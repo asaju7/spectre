@@ -12,6 +12,7 @@
 #include "Domain/LogicalCoordinates.hpp"
 #include "IO/H5/AccessType.hpp"
 #include "IO/H5/File.hpp"
+#include "IO/H5/Helpers.hpp"
 #include "IO/H5/VolumeData.hpp"
 #include "NumericalAlgorithms/Spectral/Mesh.hpp"
 #include "NumericalAlgorithms/Spectral/Spectral.hpp"
@@ -24,16 +25,18 @@
 // main module we just have it be empty
 extern "C" void CkRegisterMainModule(void) {}
 
-std::pair<size_t, std::tuple<int, int, int>>
+std::tuple<size_t, size_t, std::tuple<int, int, int>>
 compute_expected_connectivity_length(const h5::VolumeData& volume_file,
                                      const size_t& single_obs_id,
                                      const size_t total_number_of_elements) {
   size_t expected_connectivity_length = 0;
-
+  size_t expected_number_of_grid_points = 0;
   for (size_t i = 0; i < total_number_of_elements; ++i) {
     auto extents = volume_file.get_extents(single_obs_id);
     expected_connectivity_length +=
         (extents[i][0] - 1) * (extents[i][1] - 1) * (extents[i][2] - 1) * 8;
+    expected_number_of_grid_points +=
+        extents[i][0] * extents[i][1] * extents[i][2];
   }
 
   std::string grid_name_string = volume_file.get_grid_names(single_obs_id)[0];
@@ -68,7 +71,8 @@ compute_expected_connectivity_length(const h5::VolumeData& volume_file,
 
   std::tuple<int, int, int> h_refinement_tuple{h_ref_x, h_ref_y, h_ref_z};
 
-  return std::pair{expected_connectivity_length, h_refinement_tuple};
+  return std::tuple{expected_connectivity_length,
+                    expected_number_of_grid_points, h_refinement_tuple};
 }
 
 std::pair<Mesh<3>, std::string> generate_element_properties(
@@ -100,20 +104,18 @@ std::pair<Mesh<3>, std::string> generate_element_properties(
 
   std::pair<Mesh<3>, std::string> element_properties(element_mesh,
                                                      grid_names_array);
-  std::cout << "Finished generate_element_properties" << '\n';
+
   return element_properties;
 }
 
 // Compute Block-logical coordinates
-const tnsr::I<DataVector, 3, Frame::BlockLogical>&
-generate_block_logical_coords(
+const tnsr::I<DataVector, 3, Frame::BlockLogical> generate_block_logical_coords(
     const tnsr::I<DataVector, 3, Frame::ElementLogical>& new_coords,
     const std::string& element_id,
     const std::tuple<int, int, int>& h_refinement_tuple) {
-  std::cout << "New coords get 0:\n" << new_coords.get(0) << "\n";
-  int N_x = pow(2, std::get<0>(h_refinement_tuple));
-  int N_y = pow(2, std::get<1>(h_refinement_tuple));
-  int N_z = pow(2, std::get<2>(h_refinement_tuple));
+  double N_x = pow(2, std::get<0>(h_refinement_tuple));
+  double N_y = pow(2, std::get<1>(h_refinement_tuple));
+  double N_z = pow(2, std::get<2>(h_refinement_tuple));
 
   std::string index_x_string(1, element_id[8]);   // HARDCODE
   std::string index_y_string(1, element_id[13]);  // HARDCODE
@@ -127,13 +129,12 @@ generate_block_logical_coords(
   DataVector block_logical_x = 1 / N_x * new_coords.get(0) + shift_x;
   DataVector block_logical_y = 1 / N_y * new_coords.get(1) + shift_y;
   DataVector block_logical_z = 1 / N_z * new_coords.get(2) + shift_z;
-  std::cout << element_id << '\n';
+  // std::cout << element_id << '\n';
   tnsr::I<DataVector, 3, Frame::BlockLogical> block_logical_coords{
       block_logical_x.size(), 0.};
   block_logical_coords.get(0) = block_logical_x;
   block_logical_coords.get(1) = block_logical_y;
   block_logical_coords.get(2) = block_logical_z;
-  std::cout << block_logical_coords << '\n';
 
   return block_logical_coords;
 }
@@ -146,14 +147,11 @@ std::map<std::tuple<double, double, double>, size_t> generate_grid_point_map(
   DataVector coord_data_y = coord_data.get(1);
   DataVector coord_data_z = coord_data.get(2);
   for (size_t i = 0; i < coord_data_x.size(); ++i) {
-    std::tuple<double, double, double> coord_data_point;
-    std::get<0>(coord_data_point) = coord_data_x[i];
-    std::get<1>(coord_data_point) = coord_data_y[i];
-    std::get<2>(coord_data_point) = coord_data_z[i];
+    std::tuple<double, double, double> coord_data_point(
+        coord_data_x[i], coord_data_y[i], coord_data_z[i]);
     grid_point_map.insert(std::pair<std::tuple<double, double, double>, size_t>(
         coord_data_point, i));
   }
-  std::cout << "Finished generate_grid_point_map" << '\n';
   return grid_point_map;
 }
 
@@ -172,7 +170,6 @@ std::vector<double> sort_and_order(DataVector& data_vector) {
       ordered_coords.push_back(data_list[i]);
     }
   }
-  std::cout << "Finished sort_and_order" << '\n';
   return ordered_coords;
 }
 
@@ -196,29 +193,26 @@ std::vector<std::tuple<double, double, double>> build_connectivity_by_element(
       }
     }
   }
-  std::cout << "Finished build_connectivity_by_element" << '\n';
   return connectivity_as_tuples;
 }
 
-std::vector<double> generate_new_connectivity(
-    tnsr::I<DataVector, 3, Frame::BlockLogical>& logical_coords) {
+void generate_new_connectivity(
+    tnsr::I<DataVector, 3, Frame::BlockLogical>& block_logical_coords,
+    std::vector<int>& new_connectivity) {
   std::map<std::tuple<double, double, double>, size_t> grid_point_map =
-      generate_grid_point_map(logical_coords);
-  DataVector logical_coords_x = logical_coords.get(0);
-  DataVector logical_coords_y = logical_coords.get(1);
-  DataVector logical_coords_z = logical_coords.get(2);
+      generate_grid_point_map(block_logical_coords);
+  DataVector logical_coords_x = block_logical_coords.get(0);
+  DataVector logical_coords_y = block_logical_coords.get(1);
+  DataVector logical_coords_z = block_logical_coords.get(2);
   std::vector<double> ordered_x = sort_and_order(logical_coords_x);
   std::vector<double> ordered_y = sort_and_order(logical_coords_y);
   std::vector<double> ordered_z = sort_and_order(logical_coords_z);
   std::vector<std::tuple<double, double, double>> connectivity_of_tuples =
       build_connectivity_by_element(ordered_x, ordered_y, ordered_z);
-  std::vector<double> connectivity;
+
   for (const std::tuple<double, double, double>& it : connectivity_of_tuples) {
-    connectivity.push_back(grid_point_map[it]);
+    new_connectivity.push_back(grid_point_map[it]);
   }
-  // std::cout << connectivity << '\n';
-  std::cout << "Finished generate_new_connectivity" << '\n';
-  return connectivity;
 }
 
 void block_connectivity(const std::string& file_name,
@@ -232,28 +226,40 @@ void block_connectivity(const std::string& file_name,
       volume_file.get_bases(single_obs_id)
           .size();  // Check this using grid_names for faster parsing?
 
-  auto [expected_connectivity_length, h_refinement_tuple] =
+  auto [expected_connectivity_length, expected_number_of_grid_points,
+        h_refinement_tuple] =
       compute_expected_connectivity_length(volume_file, single_obs_id,
                                            total_number_of_elements);
-  std::vector<size_t> new_connectivity;
-  new_connectivity.reserve(expected_connectivity_length);
 
-  std::cout << "Pre-for loop!\n";
+  std::cout << "expected_connectivity_length: " << expected_connectivity_length
+            << "\n";
 
+  tnsr::I<DataVector, 3, Frame::BlockLogical> total_block_logical_coords{
+      expected_number_of_grid_points, 0.};
+
+  size_t offset = 0;
   for (size_t i = 0; i < volume_file.get_bases(single_obs_id).size(); ++i) {
     auto [element_mesh, element_id] =
         generate_element_properties(volume_file, single_obs_id, i);
-    std::cout << "About to run logical_coordinates\n";
     auto element_logical_coords = logical_coordinates(element_mesh);
     auto block_logical_coords = generate_block_logical_coords(
         element_logical_coords, element_id, h_refinement_tuple);
+    for (size_t j = 0 + offset;
+         j < (block_logical_coords.get(0).size() + offset); ++j) {
+      total_block_logical_coords.get(0)[j] =
+          block_logical_coords.get(0)[j - offset];
+      total_block_logical_coords.get(1)[j] =
+          block_logical_coords.get(1)[j - offset];
+      total_block_logical_coords.get(2)[j] =
+          block_logical_coords.get(2)[j - offset];
+    }
+    offset += block_logical_coords.get(0).size();
   }
-  //   auto generated_connectivity =
-  //   generate_new_connectivity(block_logical_coords);
-  //   new_connectivity.insert(new_connectivity.end(),
-  //                           generated_connectivity.begin(),
-  //                           generated_connectivity.end());
-  std::cout << "Random text\n";
+  std::vector<int> new_connectivity;
+  new_connectivity.reserve(expected_number_of_grid_points);
+  generate_new_connectivity(total_block_logical_coords, new_connectivity);
+
+  std::cout << "new_connectivity.size(): " << new_connectivity.size() << "\n";
   std::cout << new_connectivity << '\n';
 }
 
