@@ -123,6 +123,10 @@ class VolumeData : public h5::Object {
                               const std::string& component_name,
                               const std::vector<float>& contiguous_tensor_data);
 
+  /// Writes new connectivity within each block in the domain for each
+  /// observation id in a list of observation id's
+  void write_new_connectivity_data(const std::vector<size_t>& observation_ids);
+
   /// List all the integral observation ids in the subfile
   ///
   /// The list of observation IDs is sorted by their observation value, as

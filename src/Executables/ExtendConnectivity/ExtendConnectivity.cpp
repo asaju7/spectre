@@ -82,7 +82,7 @@ std::pair<Mesh<3>, std::string> generate_element_properties(
   auto bases = volume_file.get_bases(single_obs_id);
   std::array<Spectral::Basis, 3> basis_array = {
       Spectral::to_basis(bases[element_number][0]),
-      Spectral::to_basis(bases[0][1]),
+      Spectral::to_basis(bases[element_number][1]),
       Spectral::to_basis(bases[element_number][2])};
 
   auto quadratures = volume_file.get_quadratures(single_obs_id);
@@ -263,6 +263,16 @@ void block_connectivity(const std::string& file_name,
   std::cout << new_connectivity << '\n';
 }
 
+void extend_connectivity(const std::string& file_name,
+                         const std::string& subfile_name) {
+  h5::H5File<h5::AccessType::ReadWrite> data_file(file_name, true);
+  auto& volume_file = data_file.get<h5::VolumeData>("/" + subfile_name);
+  const std::vector<size_t>& observation_ids =
+      volume_file.list_observation_ids();
+
+  volume_file.write_new_connectivity_data(observation_ids);
+}
+
 // def extend_connectivity(input_file):
 
 //     if sys.version_info < (3, 0):
@@ -321,6 +331,9 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  block_connectivity(vars["file_name"].as<std::string>(),
-                     vars["subfile_name"].as<std::string>());
+  // block_connectivity(vars["file_name"].as<std::string>(),
+  //                    vars["subfile_name"].as<std::string>());
+
+  extend_connectivity(vars["file_name"].as<std::string>(),
+                      vars["subfile_name"].as<std::string>());
 }

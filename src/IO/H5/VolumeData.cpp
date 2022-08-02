@@ -37,6 +37,8 @@
 #include "Utilities/Numeric.hpp"
 #include "Utilities/StdHelpers.hpp"
 
+#include <iostream>
+
 namespace h5 {
 namespace {
 // Append the element extents and connectevity to the total extents and
@@ -158,6 +160,60 @@ void append_element_extents_and_connectivity(
       }
     }
   }
+}
+// Given a std::vector of grid_names, computes the number of blocks that exist
+// and also returns a std::vector of block numbers that is a one-to-one mapping
+// to each element in grid_names
+std::pair<int, std::vector<int>> compute_number_of_blocks(
+    std::vector<std::string>& grid_names) {
+  std::vector<int> block_number_for_each_element;
+  block_number_for_each_element.reserve(grid_names.size());
+  for (size_t i = 0; i < grid_names.size(); ++i) {
+    size_t end_position = grid_names[i].find(",", 1);
+    block_number_for_each_element.push_back(
+        std::stoi(grid_names[i].substr(2, end_position)));
+  }
+  return std::make_pair(*std::max_element(block_number_for_each_element.begin(),
+                                          block_number_for_each_element.end()),
+                        block_number_for_each_element);
+}
+// THIS NEEDS TO GET UPDATED
+std::tuple<size_t, size_t, std::array<int, 3>>
+compute_expected_connectivity_length(const h5::VolumeData& volume_file,
+                                     const size_t& single_obs_id,
+                                     const size_t total_number_of_elements) {
+  size_t expected_connectivity_length = 0;
+  size_t expected_number_of_grid_points = 0;
+  for (size_t i = 0; i < total_number_of_elements; ++i) {
+    auto extents = volume_file.get_extents(single_obs_id);
+    expected_connectivity_length +=
+        (extents[i][0] - 1) * (extents[i][1] - 1) * (extents[i][2] - 1) * 8;
+    expected_number_of_grid_points +=
+        extents[i][0] * extents[i][1] * extents[i][2];
+  }
+
+  std::string grid_name_string = volume_file.get_grid_names(single_obs_id)[0];
+  std::array<int, 3> h_ref_array;
+  size_t h_ref_previous_start_position = 0;
+  for (size_t i = 0; i < 3; ++i) {
+    size_t h_ref_start_position =
+        grid_name_string.find("L", h_ref_previous_start_position + 1);
+    size_t h_ref_end_position =
+        grid_name_string.find("I", h_ref_start_position);
+    int h_ref = std::stoi(
+        grid_name_string.substr(h_ref_start_position + 1,
+                                h_ref_end_position - h_ref_start_position - 1));
+    h_ref_array[i] = h_ref;
+    h_ref_previous_start_position = h_ref_start_position;
+  }
+  expected_connectivity_length +=
+      ((pow(2, h_ref_array[0] + 1) - 1) * (pow(2, h_ref_array[1] + 1) - 1) *
+           (pow(2, h_ref_array[2] + 1) - 1) -
+       total_number_of_elements) *
+      8;
+
+  return std::tuple{expected_connectivity_length,
+                    expected_number_of_grid_points, h_ref_array};
 }
 }  // namespace
 
@@ -385,6 +441,21 @@ void VolumeData::write_tensor_component(
                                       AccessType::ReadWrite);
   h5::write_data(observation_group.id(), contiguous_tensor_data,
                  {contiguous_tensor_data.size()}, component_name);
+}
+
+// Write new connectivity connections given a std::vector of observation ids
+void VolumeData::write_new_connectivity_data(
+    const std::vector<size_t>& observation_ids) {
+  for (size_t i = 0; i < observation_ids.size(); ++i) {
+    auto obs_id = observation_ids[i];
+    auto grid_names = get_grid_names(obs_id);
+    auto [number_of_blocks, block_number_for_each_element] =
+        compute_number_of_blocks(grid_names);
+
+    std::vector<std::vector<std::array<double, 3>>>
+        block_logical_coords_by_block;
+    block_logical_coords_by_block.reserve(number_of_blocks + 1);
+  }
 }
 
 std::vector<size_t> VolumeData::list_observation_ids() const {
