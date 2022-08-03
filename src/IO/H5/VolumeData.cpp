@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <boost/algorithm/string.hpp>
+#include <boost/functional/hash.hpp>
 #include <boost/iterator/transform_iterator.hpp>
 #include <cstddef>
 #include <hdf5.h>
@@ -13,9 +14,12 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "DataStructures/DataVector.hpp"
+#include "DataStructures/Tensor/Tensor.hpp"
+#include "NumericalAlgorithms/Spectral/LogicalCoordinates.hpp"
 #include "IO/Connectivity.hpp"
 #include "IO/H5/AccessType.hpp"
 #include "IO/H5/Header.hpp"
@@ -24,6 +28,8 @@
 #include "IO/H5/TensorData.hpp"
 #include "IO/H5/Type.hpp"
 #include "IO/H5/Version.hpp"
+#include "NumericalAlgorithms/Spectral/Mesh.hpp"
+// #include "NumericalAlgorithms/Spectral/Spectral.hpp"
 #include "Utilities/Algorithm.hpp"
 #include "Utilities/ErrorHandling/Assert.hpp"
 #include "Utilities/ErrorHandling/Error.hpp"
@@ -164,35 +170,81 @@ void append_element_extents_and_connectivity(
 // Given a std::vector of grid_names, computes the number of blocks that exist
 // and also returns a std::vector of block numbers that is a one-to-one mapping
 // to each element in grid_names
-std::pair<int, std::vector<int>> compute_number_of_blocks(
-    std::vector<std::string>& grid_names) {
+std::tuple<int, std::vector<int>, std::vector<std::vector<int>>>
+compute_and_organize_block_info(std::vector<std::string>& grid_names) {
   std::vector<int> block_number_for_each_element;
+  std::vector<std::vector<int>> sorted_element_indices;
   block_number_for_each_element.reserve(grid_names.size());
+
+  // Fills block_number_for_each_element
   for (size_t i = 0; i < grid_names.size(); ++i) {
     size_t end_position = grid_names[i].find(",", 1);
     block_number_for_each_element.push_back(
         std::stoi(grid_names[i].substr(2, end_position)));
   }
-  return std::make_pair(*std::max_element(block_number_for_each_element.begin(),
-                                          block_number_for_each_element.end()),
-                        block_number_for_each_element);
-}
-// THIS NEEDS TO GET UPDATED
-std::tuple<size_t, size_t, std::array<int, 3>>
-compute_expected_connectivity_length(const h5::VolumeData& volume_file,
-                                     const size_t& single_obs_id,
-                                     const size_t total_number_of_elements) {
-  size_t expected_connectivity_length = 0;
-  size_t expected_number_of_grid_points = 0;
-  for (size_t i = 0; i < total_number_of_elements; ++i) {
-    auto extents = volume_file.get_extents(single_obs_id);
-    expected_connectivity_length +=
-        (extents[i][0] - 1) * (extents[i][1] - 1) * (extents[i][2] - 1) * 8;
-    expected_number_of_grid_points +=
-        extents[i][0] * extents[i][1] * extents[i][2];
+
+  size_t number_of_blocks =
+      *std::max_element(block_number_for_each_element.begin(),
+                        block_number_for_each_element.end()) +
+      1;
+  std::cout << "number_of_blocks is: " << number_of_blocks << "\n";
+  sorted_element_indices.reserve(number_of_blocks);
+
+  // Properly sizes subvectors of sorted_element_indices
+  for (size_t i = 0; i < number_of_blocks; ++i) {
+    std::vector<int> sizing_vector;
+    auto grid_names_in_block =
+        std::count(block_number_for_each_element.begin(),
+                   block_number_for_each_element.end(), i);
+    sizing_vector.reserve(grid_names_in_block);
+    sorted_element_indices.push_back(sizing_vector);
   }
 
-  std::string grid_name_string = volume_file.get_grid_names(single_obs_id)[0];
+  // Organizing grid_names by block
+  for (size_t i = 0; i < block_number_for_each_element.size(); ++i) {
+    sorted_element_indices[block_number_for_each_element[i]].push_back(i);
+  }
+
+  return std::make_tuple(number_of_blocks, block_number_for_each_element,
+                         sorted_element_indices);
+}
+// Sort input by block
+template <typename T>
+std::vector<std::vector<T>> sort_by_block(
+    const std::vector<std::vector<int>>& sorted_element_indices,
+    const std::vector<T>& property_to_sort) {
+  std::vector<std::vector<T>> sorted_property;
+  sorted_property.reserve(sorted_element_indices.size());
+
+  // Properly sizes subvectors
+  for (size_t i = 0; i < sorted_element_indices.size(); ++i) {
+    std::vector<T> sizing_vector;
+    sizing_vector.reserve(sorted_element_indices[i].size());
+    for (size_t j = 0; j < sorted_element_indices[i].size(); ++j) {
+      sizing_vector.push_back(property_to_sort[sorted_element_indices[i][j]]);
+    }
+    sorted_property.push_back(sizing_vector);
+  }
+
+  return sorted_property;
+}
+// Returns properties for each block
+std::tuple<size_t, size_t, std::array<int, 3>> compute_block_level_properties(
+    const std::vector<std::string>& block_grid_names,
+    const std::vector<std::vector<size_t>>& block_extents) {
+  size_t expected_connectivity_length = 0;
+  size_t expected_number_of_grid_points = 0;
+  for (size_t i = 0; i < block_extents.size(); ++i) {
+    // Connectivity that already exists
+    expected_connectivity_length += (block_extents[i][0] - 1) *
+                                    (block_extents[i][1] - 1) *
+                                    (block_extents[i][2] - 1) * 8;
+    // Used for reserving the length of block_logical_coords
+    expected_number_of_grid_points +=
+        block_extents[i][0] * block_extents[i][1] * block_extents[i][2];
+  }
+
+  std::string grid_name_string = block_grid_names[0];
   std::array<int, 3> h_ref_array;
   size_t h_ref_previous_start_position = 0;
   for (size_t i = 0; i < 3; ++i) {
@@ -209,11 +261,31 @@ compute_expected_connectivity_length(const h5::VolumeData& volume_file,
   expected_connectivity_length +=
       ((pow(2, h_ref_array[0] + 1) - 1) * (pow(2, h_ref_array[1] + 1) - 1) *
            (pow(2, h_ref_array[2] + 1) - 1) -
-       total_number_of_elements) *
+       block_extents.size()) *
       8;
 
   return std::tuple{expected_connectivity_length,
                     expected_number_of_grid_points, h_ref_array};
+}
+// Generates the mesh
+Mesh<3> generate_element_properties(
+    const std::vector<std::string>& element_bases,
+    const std::vector<std::string>& element_quadratures,
+    const std::vector<size_t>& element_extents) {
+  std::array<Spectral::Basis, 3> basis_array = {
+      Spectral::to_basis(element_bases[0]),
+      Spectral::to_basis(element_bases[1]),
+      Spectral::to_basis(element_bases[2])};
+
+  std::array<Spectral::Quadrature, 3> quadrature_array = {
+      Spectral::to_quadrature(element_quadratures[0]),
+      Spectral::to_quadrature(element_quadratures[1]),
+      Spectral::to_quadrature(element_quadratures[2])};
+
+  std::array<size_t, 3> extents_array = {element_extents[0], element_extents[1],
+                                         element_extents[2]};
+
+  return Mesh<3>{extents_array, basis_array, quadrature_array};
 }
 }  // namespace
 
@@ -449,12 +521,54 @@ void VolumeData::write_new_connectivity_data(
   for (size_t i = 0; i < observation_ids.size(); ++i) {
     auto obs_id = observation_ids[i];
     auto grid_names = get_grid_names(obs_id);
-    auto [number_of_blocks, block_number_for_each_element] =
-        compute_number_of_blocks(grid_names);
+    auto extents = get_extents(obs_id);
+    auto bases = get_bases(obs_id);
+    auto quadratures = get_quadratures(obs_id);
+
+    auto [number_of_blocks, block_number_for_each_element,
+          sorted_element_indices] = compute_and_organize_block_info(grid_names);
+
+    auto sorted_grid_names = sort_by_block(sorted_element_indices, grid_names);
+    auto sorted_extents = sort_by_block(sorted_element_indices, extents);
+
+    auto total_expected_connectivity = 0;
+    std::vector<int> expected_grid_points_per_block;
+    expected_grid_points_per_block.reserve(number_of_blocks);
+    std::vector<std::array<int, 3>> h_ref_per_block;
+    h_ref_per_block.reserve(number_of_blocks);
+
+    for (size_t i = 0; i < number_of_blocks; ++i) {
+      auto [expected_connectivity_length, expected_number_of_grid_points,
+            h_ref_array] = compute_block_level_properties(sorted_grid_names[i],
+                                                          sorted_extents[i]);
+      total_expected_connectivity += expected_connectivity_length;
+      expected_grid_points_per_block.push_back(expected_number_of_grid_points);
+      h_ref_per_block.push_back(h_ref_array);
+    }
+
+    std::unordered_map<std::pair<int, std::array<double, 3>>, size_t,
+                       boost::hash<std::pair<int, std::array<double, 3>>>>
+        block_and_grid_point_map;
+
+    for (size_t j = 0; j < sorted_element_indices.size(); ++j) {
+      auto element_mesh =
+          generate_element_properties(bases[j], quadratures[j], extents[j]);
+      auto element_logical_coords_tensor = logical_coordinates(element_mesh);
+
+      std::vector<std::array<double, 3>> element_logical_coordinates;
+      element_logical_coordinates.reserve(
+          element_logical_coords_tensor.get(0).size());
+      for (size_t k = 0; k < element_logical_coords_tensor.get(0).size(); ++k) {
+        element_logical_coordinates.push_back(
+            std::array<double, 3>{element_logical_coords_tensor.get(0)[k],
+                                  element_logical_coords_tensor.get(1)[k],
+                                  element_logical_coords_tensor.get(2)[k]});
+      }
+    }
 
     std::vector<std::vector<std::array<double, 3>>>
         block_logical_coords_by_block;
-    block_logical_coords_by_block.reserve(number_of_blocks + 1);
+    block_logical_coords_by_block.reserve(number_of_blocks);
   }
 }
 

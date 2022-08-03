@@ -273,38 +273,6 @@ void extend_connectivity(const std::string& file_name,
   volume_file.write_new_connectivity_data(observation_ids);
 }
 
-// def extend_connectivity(input_file):
-
-//     if sys.version_info < (3, 0):
-//         logging.warning("You are attempting to run this script with "
-//                         "python 2, which is deprecated. GenerateXdmf.py might
-//                         " "hang or run very slowly using python 2. Please use
-//                         " "python 3 instead.")
-
-//     with h5py.File(input_file, 'r+') as dataset:
-//         subfile_keys = list(dataset.keys())
-//         subfile_name = subfile_keys[0]
-//         data = dataset[subfile_name]
-//         observation_keys = list(data.keys())
-//         for i in range(len(observation_keys)):
-//             print("Starting observation key number " + str(i))  ############
-//             data_y = np.array(
-//                 dataset[subfile_name + "/" + observation_keys[i] +
-//                         "/InertialCoordinates_y"])
-//             data_x = np.array(
-//                 dataset[subfile_name + "/" + observation_keys[i] +
-//                         "/InertialCoordinates_x"])
-//             data_z = np.array(
-//                 dataset[subfile_name + "/" + observation_keys[i] +
-//                         "/InertialCoordinates_z"])
-//             new_connect = generate_new_connectivity(data_x, data_y, data_z)
-//             del dataset[subfile_name + "/" + observation_keys[i] +
-//                         "/connectivity"]
-//             dataset.create_dataset(subfile_name + "/" + observation_keys[i] +
-//                                    "/connectivity",
-//                                    data=new_connect)
-//         dataset.close()
-
 int main(int argc, char** argv) {
   boost::program_options::positional_options_description pos_desc;
 
