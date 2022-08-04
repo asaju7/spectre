@@ -287,6 +287,153 @@ Mesh<3> generate_element_properties(
 
   return Mesh<3>{extents_array, basis_array, quadrature_array};
 }
+std::vector<std::array<double, 3>> generate_block_logical_coordinates(
+    const std::vector<std::array<double, 3>>& element_logical_coordinates,
+    const std::string& grid_name,
+    const std::array<int, 3>& h_refinement_array) {
+  size_t grid_points_x_start_position = 0;
+  std::vector<std::array<double, 3>> block_logical_coordinates;
+  block_logical_coordinates.reserve(element_logical_coordinates.size());
+  std::vector<double> number_of_elements_each_direction;
+  number_of_elements_each_direction.reserve(3);  // Hardcoded for 3 dim
+  std::vector<double> shift_each_direction;
+  shift_each_direction.reserve(3);  // Hardocded for 3 dim
+  for (size_t i = 0; i < 3; ++i) {
+    double number_of_elements = pow(2, h_refinement_array[i]);
+    number_of_elements_each_direction.push_back(number_of_elements);
+    size_t grid_points_start_position =
+        grid_name.find("I", grid_points_x_start_position + 1);
+    size_t grid_points_end_position =
+        grid_name.find(",", grid_points_start_position);
+    if (i == 2) {
+      grid_points_end_position =
+          grid_name.find(")", grid_points_start_position);
+    }
+    int element_index = std::stoi(grid_name.substr(
+        grid_points_start_position + 1,
+        grid_points_end_position - grid_points_start_position - 1));
+    double shift = (-1 + (2 * element_index + 1) / number_of_elements);
+    shift_each_direction.push_back(shift);
+    grid_points_x_start_position = grid_points_start_position;
+  }
+  for (size_t i = 0; i < element_logical_coordinates.size(); ++i) {
+    std::array<double, 3> grid_point_coordinate;
+    for (size_t j = 0; j < grid_point_coordinate.size(); ++j) {
+      grid_point_coordinate[j] = 1 / number_of_elements_each_direction[j] *
+                                     element_logical_coordinates[i][j] +
+                                 shift_each_direction[j];
+    }
+    block_logical_coordinates.push_back(grid_point_coordinate);
+  }
+
+  return block_logical_coordinates;
+}
+// Sorting routine for an incoming list of values
+std::vector<double> sort_and_order(std::vector<double>& unsorted_coordinate) {
+  std::vector<double> sorted_coordinate;
+  // Come up with way to figure out sroted_coordinate length. Maybe number of
+  // grid points???
+  sort(unsorted_coordinate.begin(), unsorted_coordinate.end());
+  sorted_coordinate.push_back(unsorted_coordinate[0]);
+  for (size_t i = 1; i < unsorted_coordinate.size(); ++i) {
+    if (unsorted_coordinate[i] == sorted_coordinate.end()[-1]) {
+      continue;
+    } else {
+      sorted_coordinate.push_back(unsorted_coordinate[i]);
+    }
+  }
+  return sorted_coordinate;
+}
+// Builds the connectivity by cube
+std::vector<std::pair<int, std::array<double, 3>>>
+build_connectivity_by_hexahedron(std::vector<double>& sorted_x,
+                                 std::vector<double>& sorted_y,
+                                 std::vector<double>& sorted_z,
+                                 int& block_number) {
+  std::vector<std::pair<int, std::array<double, 3>>> connectivity_of_keys;
+  for (size_t k = 0; k < sorted_z.size() - 1; ++k) {
+    for (size_t j = 0; j < sorted_y.size() - 1; ++j) {
+      for (size_t i = 0; i < sorted_x.size() - 1; ++i) {
+        std::array point_one{sorted_x[i], sorted_y[j], sorted_z[k]};
+        std::array point_two{sorted_x[i + 1], sorted_y[j], sorted_z[k]};
+        std::array point_three{sorted_x[i + 1], sorted_y[j + 1], sorted_z[k]};
+        std::array point_four{sorted_x[i], sorted_y[j + 1], sorted_z[k]};
+        std::array point_five{sorted_x[i], sorted_y[j], sorted_z[k + 1]};
+        std::array point_six{sorted_x[i + 1], sorted_y[j], sorted_z[k + 1]};
+        std::array point_seven{sorted_x[i + 1], sorted_y[j + 1],
+                               sorted_z[k + 1]};
+        std::array point_eight{sorted_x[i], sorted_y[j + 1], sorted_z[k + 1]};
+        // std::cout << "Set of 8: \n";
+        // for (size_t m = 0; m < point_one.size(); ++m) {
+        //   std::cout << point_one[m] << "  ";
+        // }
+        // std::cout << "\n";
+        // for (size_t m = 0; m < point_one.size(); ++m) {
+        //   std::cout << point_two[m] << "  ";
+        // }
+        // std::cout << "\n";
+        // for (size_t m = 0; m < point_one.size(); ++m) {
+        //   std::cout << point_three[m] << "  ";
+        // }
+        // std::cout << "\n";
+        // for (size_t m = 0; m < point_one.size(); ++m) {
+        //   std::cout << point_four[m] << "  ";
+        // }
+        // std::cout << "\n";
+        // for (size_t m = 0; m < point_one.size(); ++m) {
+        //   std::cout << point_five[m] << "  ";
+        // }
+        // std::cout << "\n";
+        // for (size_t m = 0; m < point_one.size(); ++m) {
+        //   std::cout << point_six[m] << "  ";
+        // }
+        // std::cout << "\n";
+        // for (size_t m = 0; m < point_one.size(); ++m) {
+        //   std::cout << point_seven[m] << "  ";
+        // }
+        // std::cout << "\n";
+        // for (size_t m = 0; m < point_one.size(); ++m) {
+        //   std::cout << point_eight[m] << "  ";
+        // }
+        // std::cout << "\n";
+        connectivity_of_keys.insert(
+            connectivity_of_keys.end(),
+            {std::make_pair(block_number, point_one),
+             std::make_pair(block_number, point_two),
+             std::make_pair(block_number, point_three),
+             std::make_pair(block_number, point_four),
+             std::make_pair(block_number, point_five),
+             std::make_pair(block_number, point_six),
+             std::make_pair(block_number, point_seven),
+             std::make_pair(block_number, point_eight)});
+      }
+    }
+  }
+  return connectivity_of_keys;
+}
+// Generates the new connectivity
+std::vector<std::pair<int, std::array<double, 3>>> generate_new_connectivity(
+    std::vector<std::array<double, 3>>& block_logical_coordinates,
+    int& block_number) {
+  std::vector<std::vector<double>> unsorted_coordinates;
+  unsorted_coordinates.reserve(3);  // Hardcoded for dim 3
+  for (size_t i = 0; i < 3; ++i) {
+    std::vector<double> coordinates_by_direction;
+    coordinates_by_direction.reserve(block_logical_coordinates.size());
+    for (size_t j = 0; j < block_logical_coordinates.size(); ++j) {
+      coordinates_by_direction.push_back(block_logical_coordinates[j][i]);
+    }
+    unsorted_coordinates.push_back(coordinates_by_direction);
+  }
+  auto ordered_x = sort_and_order(unsorted_coordinates[0]);
+  // for (size_t m = 0; m < ordered_x.size(); ++m) {
+  //   std::cout << "Ordered x values: " << ordered_x[m] << "\n";
+  // }
+  auto ordered_y = sort_and_order(unsorted_coordinates[1]);
+  auto ordered_z = sort_and_order(unsorted_coordinates[2]);
+  return build_connectivity_by_hexahedron(ordered_x, ordered_y, ordered_z,
+                                          block_number);
+}
 }  // namespace
 
 VolumeData::VolumeData(const bool subfile_exists, detail::OpenGroup&& group,
@@ -537,38 +684,107 @@ void VolumeData::write_new_connectivity_data(
     std::vector<std::array<int, 3>> h_ref_per_block;
     h_ref_per_block.reserve(number_of_blocks);
 
-    for (size_t i = 0; i < number_of_blocks; ++i) {
+    // Loop over blocks
+    for (size_t j = 0; j < number_of_blocks; ++j) {
       auto [expected_connectivity_length, expected_number_of_grid_points,
-            h_ref_array] = compute_block_level_properties(sorted_grid_names[i],
-                                                          sorted_extents[i]);
+            h_ref_array] = compute_block_level_properties(sorted_grid_names[j],
+                                                          sorted_extents[j]);
       total_expected_connectivity += expected_connectivity_length;
       expected_grid_points_per_block.push_back(expected_number_of_grid_points);
       h_ref_per_block.push_back(h_ref_array);
     }
 
+    // Instantiates the unordered_map
     std::unordered_map<std::pair<int, std::array<double, 3>>, size_t,
                        boost::hash<std::pair<int, std::array<double, 3>>>>
         block_and_grid_point_map;
 
+    // Instantiates the sorted container for the grid points
+    std::vector<std::vector<std::array<double, 3>>>
+        block_logical_coordinates_by_block;
+    block_logical_coordinates_by_block.reserve(number_of_blocks);
+
+    // Reserve size for the subvectors
     for (size_t j = 0; j < sorted_element_indices.size(); ++j) {
+      std::vector<std::array<double, 3>> sizing_vector;
+      sizing_vector.reserve(sorted_element_indices[j].size());
+      block_logical_coordinates_by_block.push_back(sizing_vector);
+    }
+
+    size_t grid_point_counter = 0;
+    // Loop over elements
+    for (size_t j = 0; j < block_number_for_each_element.size(); ++j) {
       auto element_mesh =
           generate_element_properties(bases[j], quadratures[j], extents[j]);
-      auto element_logical_coords_tensor = logical_coordinates(element_mesh);
+      auto element_logical_coordinates_tensor =
+          logical_coordinates(element_mesh);
 
       std::vector<std::array<double, 3>> element_logical_coordinates;
       element_logical_coordinates.reserve(
-          element_logical_coords_tensor.get(0).size());
-      for (size_t k = 0; k < element_logical_coords_tensor.get(0).size(); ++k) {
-        element_logical_coordinates.push_back(
-            std::array<double, 3>{element_logical_coords_tensor.get(0)[k],
-                                  element_logical_coords_tensor.get(1)[k],
-                                  element_logical_coords_tensor.get(2)[k]});
+          element_logical_coordinates_tensor.get(0).size());
+
+      for (size_t k = 0; k < element_logical_coordinates_tensor.get(0).size();
+           ++k) {
+        element_logical_coordinates.push_back(std::array<double, 3>{
+            element_logical_coordinates_tensor.get(0)[k],
+            element_logical_coordinates_tensor.get(1)[k],
+            element_logical_coordinates_tensor.get(2)[k]});
+      }
+
+      auto block_logical_coordinates = generate_block_logical_coordinates(
+          element_logical_coordinates, grid_names[j],
+          h_ref_per_block[block_number_for_each_element[j]]);
+
+      // Stores (B#, grid_point_coord_array) -> grid_point_number in an
+      // unordered_map and grid_point_coord_array by block
+      for (size_t k = 0; k < block_logical_coordinates.size(); ++k) {
+        // std::cout << "grid_point_counter: " << grid_point_counter << "\n";
+        std::pair<int, std::array<double, 3>> block_and_grid_point(
+            block_number_for_each_element[j], block_logical_coordinates[k]);
+        block_and_grid_point_map.insert(
+            std::pair<std::pair<int, std::array<double, 3>>, size_t>(
+                block_and_grid_point, grid_point_counter));
+        grid_point_counter += 1;
+        // std::cout << ""
+        // for (size_t m = 0; m < 3; ++m) {
+
+        // }
+
+        block_logical_coordinates_by_block[block_number_for_each_element[j]]
+            .push_back(block_logical_coordinates[k]);
+        // std::cout << "block_logical_coordinates_by_block subvector "
+        //           << block_number_for_each_element[i] << " size: "
+        //           << block_logical_coordinates_by_block
+        //                  [block_number_for_each_element[i]]
+        //                      .size()
+        //           << "\n";
+      }
+    }
+    std::vector<int> new_connectivity;
+    new_connectivity.reserve(total_expected_connectivity);
+    std::cout << "Main loop to build the connectivity is about to begin!\n";
+    for (size_t j = 0; j < block_logical_coordinates_by_block.size(); ++j) {
+      int block_number = static_cast<int>(j);
+      auto connectivity_of_keys = generate_new_connectivity(
+          block_logical_coordinates_by_block[j], block_number);
+      for (const std::pair<int, std::array<double, 3>>& it :
+           connectivity_of_keys) {
+        new_connectivity.push_back(block_and_grid_point_map[it]);
       }
     }
 
-    std::vector<std::vector<std::array<double, 3>>>
-        block_logical_coords_by_block;
-    block_logical_coords_by_block.reserve(number_of_blocks);
+    const std::string path = "ObservationId" + std::to_string(obs_id);
+    detail::OpenGroup observation_group(volume_data_group_.id(), path,
+                                        AccessType::ReadWrite);
+    const hid_t group_id = observation_group.id();
+    H5Ldelete(group_id, "connectivity", H5P_DEFAULT);
+    write_connectivity(group_id, new_connectivity);
+    // std::cout << "length: " << new_connectivity.size() << "\n";
+    // std::cout << "[";
+    // for (size_t j = 0; j < new_connectivity.size(); ++j) {
+    //   std::cout << new_connectivity[j] << ",";
+    // }
+    // std::cout << "]\n";
   }
 }
 
