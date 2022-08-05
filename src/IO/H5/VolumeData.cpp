@@ -29,7 +29,7 @@
 #include "IO/H5/Type.hpp"
 #include "IO/H5/Version.hpp"
 #include "NumericalAlgorithms/Spectral/Mesh.hpp"
-// #include "NumericalAlgorithms/Spectral/Spectral.hpp"
+#include "NumericalAlgorithms/Spectral/Spectral.hpp"
 #include "Utilities/Algorithm.hpp"
 #include "Utilities/ErrorHandling/Assert.hpp"
 #include "Utilities/ErrorHandling/Error.hpp"
@@ -170,32 +170,31 @@ void append_element_extents_and_connectivity(
 // Given a std::vector of grid_names, computes the number of blocks that exist
 // and also returns a std::vector of block numbers that is a one-to-one mapping
 // to each element in grid_names
-std::tuple<int, std::vector<int>, std::vector<std::vector<int>>>
+std::tuple<size_t, std::vector<size_t>, std::vector<std::vector<size_t>>>
 compute_and_organize_block_info(std::vector<std::string>& grid_names) {
-  std::vector<int> block_number_for_each_element;
-  std::vector<std::vector<int>> sorted_element_indices;
+  std::vector<size_t> block_number_for_each_element;
+  std::vector<std::vector<size_t>> sorted_element_indices;
   block_number_for_each_element.reserve(grid_names.size());
 
   // Fills block_number_for_each_element
   for (size_t i = 0; i < grid_names.size(); ++i) {
     size_t end_position = grid_names[i].find(",", 1);
     block_number_for_each_element.push_back(
-        std::stoi(grid_names[i].substr(2, end_position)));
+        static_cast<size_t>(std::stoi(grid_names[i].substr(2, end_position))));
   }
 
-  size_t number_of_blocks =
+  auto max_block_number =
       *std::max_element(block_number_for_each_element.begin(),
-                        block_number_for_each_element.end()) +
-      1;
-  std::cout << "number_of_blocks is: " << number_of_blocks << "\n";
+                        block_number_for_each_element.end());
+  auto number_of_blocks = max_block_number + 1;
   sorted_element_indices.reserve(number_of_blocks);
 
   // Properly sizes subvectors of sorted_element_indices
   for (size_t i = 0; i < number_of_blocks; ++i) {
-    std::vector<int> sizing_vector;
+    std::vector<size_t> sizing_vector;
     auto grid_names_in_block =
-        std::count(block_number_for_each_element.begin(),
-                   block_number_for_each_element.end(), i);
+        static_cast<size_t>(std::count(block_number_for_each_element.begin(),
+                                       block_number_for_each_element.end(), i));
     sizing_vector.reserve(grid_names_in_block);
     sorted_element_indices.push_back(sizing_vector);
   }
@@ -211,7 +210,7 @@ compute_and_organize_block_info(std::vector<std::string>& grid_names) {
 // Sort input by block
 template <typename T>
 std::vector<std::vector<T>> sort_by_block(
-    const std::vector<std::vector<int>>& sorted_element_indices,
+    const std::vector<std::vector<size_t>>& sorted_element_indices,
     const std::vector<T>& property_to_sort) {
   std::vector<std::vector<T>> sorted_property;
   sorted_property.reserve(sorted_element_indices.size());
@@ -234,6 +233,7 @@ std::tuple<size_t, size_t, std::array<int, 3>> compute_block_level_properties(
     const std::vector<std::vector<size_t>>& block_extents) {
   size_t expected_connectivity_length = 0;
   size_t expected_number_of_grid_points = 0;
+
   for (size_t i = 0; i < block_extents.size(); ++i) {
     // Connectivity that already exists
     expected_connectivity_length += (block_extents[i][0] - 1) *
@@ -347,12 +347,12 @@ std::vector<double> sort_and_order(std::vector<double>& unsorted_coordinate) {
   return sorted_coordinate;
 }
 // Builds the connectivity by cube
-std::vector<std::pair<int, std::array<double, 3>>>
+std::vector<std::pair<size_t, std::array<double, 3>>>
 build_connectivity_by_hexahedron(std::vector<double>& sorted_x,
                                  std::vector<double>& sorted_y,
                                  std::vector<double>& sorted_z,
-                                 int& block_number) {
-  std::vector<std::pair<int, std::array<double, 3>>> connectivity_of_keys;
+                                 size_t& block_number) {
+  std::vector<std::pair<size_t, std::array<double, 3>>> connectivity_of_keys;
 
   for (size_t k = 0; k < sorted_z.size() - 1; ++k) {
     for (size_t j = 0; j < sorted_y.size() - 1; ++j) {
@@ -382,9 +382,9 @@ build_connectivity_by_hexahedron(std::vector<double>& sorted_x,
   return connectivity_of_keys;
 }
 // Generates the new connectivity
-std::vector<std::pair<int, std::array<double, 3>>> generate_new_connectivity(
+std::vector<std::pair<size_t, std::array<double, 3>>> generate_new_connectivity(
     std::vector<std::array<double, 3>>& block_logical_coordinates,
-    int& block_number) {
+    size_t& block_number) {
   std::vector<std::vector<double>> unsorted_coordinates;
   unsorted_coordinates.reserve(3);  // Hardcoded for dim 3
 
@@ -647,7 +647,7 @@ void VolumeData::write_new_connectivity_data(
     auto sorted_grid_names = sort_by_block(sorted_element_indices, grid_names);
     auto sorted_extents = sort_by_block(sorted_element_indices, extents);
 
-    auto total_expected_connectivity = 0;
+    size_t total_expected_connectivity = 0;
     std::vector<int> expected_grid_points_per_block;
     expected_grid_points_per_block.reserve(number_of_blocks);
     std::vector<std::array<int, 3>> h_ref_per_block;
@@ -664,8 +664,8 @@ void VolumeData::write_new_connectivity_data(
     }
 
     // Instantiates the unordered_map
-    std::unordered_map<std::pair<int, std::array<double, 3>>, size_t,
-                       boost::hash<std::pair<int, std::array<double, 3>>>>
+    std::unordered_map<std::pair<size_t, std::array<double, 3>>, size_t,
+                       boost::hash<std::pair<size_t, std::array<double, 3>>>>
         block_and_grid_point_map;
 
     // Instantiates the sorted container for the grid points
@@ -709,10 +709,10 @@ void VolumeData::write_new_connectivity_data(
       // Stores (B#, grid_point_coord_array) -> grid_point_number in an
       // unordered_map and grid_point_coord_array by block
       for (size_t k = 0; k < block_logical_coordinates.size(); ++k) {
-        std::pair<int, std::array<double, 3>> block_and_grid_point(
+        std::pair<size_t, std::array<double, 3>> block_and_grid_point(
             block_number_for_each_element[j], block_logical_coordinates[k]);
         block_and_grid_point_map.insert(
-            std::pair<std::pair<int, std::array<double, 3>>, size_t>(
+            std::pair<std::pair<size_t, std::array<double, 3>>, size_t>(
                 block_and_grid_point, grid_point_counter));
         grid_point_counter += 1;
 
@@ -725,10 +725,10 @@ void VolumeData::write_new_connectivity_data(
     new_connectivity.reserve(total_expected_connectivity);
 
     for (size_t j = 0; j < block_logical_coordinates_by_block.size(); ++j) {
-      int block_number = static_cast<int>(j);
+      auto block_number = j;
       auto connectivity_of_keys = generate_new_connectivity(
           block_logical_coordinates_by_block[j], block_number);
-      for (const std::pair<int, std::array<double, 3>>& it :
+      for (const std::pair<size_t, std::array<double, 3>>& it :
            connectivity_of_keys) {
         new_connectivity.push_back(block_and_grid_point_map[it]);
       }
