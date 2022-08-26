@@ -125,7 +125,8 @@ class VolumeData : public h5::Object {
 
   /// Writes new connectivity within each block in the domain for each
   /// observation id in a list of observation id's
-  void write_new_connectivity_data(const std::vector<size_t>& observation_ids);
+  void write_new_connectivity_data(const std::vector<size_t>& observation_ids,
+                                   const bool& print_size);
 
   /// List all the integral observation ids in the subfile
   ///

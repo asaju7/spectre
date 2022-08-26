@@ -167,6 +167,7 @@ void append_element_extents_and_connectivity(
     }
   }
 }
+
 // Given a std::vector of grid_names, computes the number of blocks that exist
 // and also returns a std::vector of block numbers that is a one-to-one mapping
 // to each element in grid_names
@@ -207,6 +208,7 @@ compute_and_organize_block_info(std::vector<std::string>& grid_names) {
   return std::make_tuple(number_of_blocks, block_number_for_each_element,
                          sorted_element_indices);
 }
+
 // Sort input by block
 template <typename T>
 std::vector<std::vector<T>> sort_by_block(
@@ -227,6 +229,7 @@ std::vector<std::vector<T>> sort_by_block(
 
   return sorted_property;
 }
+
 // Returns properties for each block
 std::tuple<size_t, size_t, std::array<int, 3>> compute_block_level_properties(
     const std::vector<std::string>& block_grid_names,
@@ -267,8 +270,9 @@ std::tuple<size_t, size_t, std::array<int, 3>> compute_block_level_properties(
   return std::tuple{expected_connectivity_length,
                     expected_number_of_grid_points, h_ref_array};
 }
+
 // Generates the mesh
-Mesh<3> generate_element_properties(
+Mesh<3> generate_element_mesh(
     const std::vector<std::string>& element_bases,
     const std::vector<std::string>& element_quadratures,
     const std::vector<size_t>& element_extents) {
@@ -330,6 +334,7 @@ std::vector<std::array<double, 3>> generate_block_logical_coordinates(
 
   return block_logical_coordinates;
 }
+
 // Sorting routine for an incoming list of values
 std::vector<double> sort_and_order(std::vector<double>& unsorted_coordinate) {
   std::vector<double> sorted_coordinate;
@@ -346,6 +351,7 @@ std::vector<double> sort_and_order(std::vector<double>& unsorted_coordinate) {
   }
   return sorted_coordinate;
 }
+
 // Builds the connectivity by cube
 std::vector<std::pair<size_t, std::array<double, 3>>>
 build_connectivity_by_hexahedron(std::vector<double>& sorted_x,
@@ -381,6 +387,7 @@ build_connectivity_by_hexahedron(std::vector<double>& sorted_x,
   }
   return connectivity_of_keys;
 }
+
 // Generates the new connectivity
 std::vector<std::pair<size_t, std::array<double, 3>>> generate_new_connectivity(
     std::vector<std::array<double, 3>>& block_logical_coordinates,
@@ -633,7 +640,7 @@ void VolumeData::write_tensor_component(
 
 // Write new connectivity connections given a std::vector of observation ids
 void VolumeData::write_new_connectivity_data(
-    const std::vector<size_t>& observation_ids) {
+    const std::vector<size_t>& observation_ids, const bool& print_size) {
   for (size_t i = 0; i < observation_ids.size(); ++i) {
     auto obs_id = observation_ids[i];
     auto grid_names = get_grid_names(obs_id);
@@ -686,7 +693,7 @@ void VolumeData::write_new_connectivity_data(
     // Loop over elements
     for (size_t j = 0; j < block_number_for_each_element.size(); ++j) {
       auto element_mesh =
-          generate_element_properties(bases[j], quadratures[j], extents[j]);
+          generate_element_mesh(bases[j], quadratures[j], extents[j]);
       auto element_logical_coordinates_tensor =
           logical_coordinates(element_mesh);
 
@@ -741,7 +748,9 @@ void VolumeData::write_new_connectivity_data(
     const hid_t group_id = observation_group.id();
     H5Ldelete(group_id, "connectivity", H5P_DEFAULT);
     write_connectivity(group_id, new_connectivity);
-    std::cout << "connectivity length: " << new_connectivity.size() << "\n";
+    if (print_size == true) {
+      std::cout << "connectivity length: " << new_connectivity.size() << "\n";
+    }
   }
 }
 
