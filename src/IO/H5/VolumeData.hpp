@@ -125,6 +125,7 @@ class VolumeData : public h5::Object {
 
   /// Writes new connectivity within each block in the domain for each
   /// observation id in a list of observation id's
+  template <size_t SpatialDim>
   void write_new_connectivity_data(const std::vector<size_t>& observation_ids,
                                    const bool& print_size);
 

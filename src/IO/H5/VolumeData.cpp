@@ -231,26 +231,32 @@ std::vector<std::vector<T>> sort_by_block(
 }
 
 // Returns properties for each block
-std::tuple<size_t, size_t, std::array<int, 3>> compute_block_level_properties(
+template <size_t SpatialDim>
+std::tuple<size_t, size_t, std::array<int, SpatialDim>>
+compute_block_level_properties(
     const std::vector<std::string>& block_grid_names,
     const std::vector<std::vector<size_t>>& block_extents) {
   size_t expected_connectivity_length = 0;
   size_t expected_number_of_grid_points = 0;
 
   for (size_t i = 0; i < block_extents.size(); ++i) {
+    size_t element_grid_points = 1;
+    size_t element_connectivity_length = 1;
+    for (size_t j = 0; j < SpatialDim; j++) {
+      element_grid_points *= block_extents[i][j];
+      element_connectivity_length *= block_extents[i][j] - 1;
+    }
     // Connectivity that already exists
-    expected_connectivity_length += (block_extents[i][0] - 1) *
-                                    (block_extents[i][1] - 1) *
-                                    (block_extents[i][2] - 1) * 8;
+    expected_connectivity_length += element_connectivity_length * 8;
     // Used for reserving the length of block_logical_coords
-    expected_number_of_grid_points +=
-        block_extents[i][0] * block_extents[i][1] * block_extents[i][2];
+    expected_number_of_grid_points += element_grid_points;
   }
 
   std::string grid_name_string = block_grid_names[0];
-  std::array<int, 3> h_ref_array;
+  std::array<int, SpatialDim> h_ref_array;
   size_t h_ref_previous_start_position = 0;
-  for (size_t i = 0; i < 3; ++i) {
+  size_t additional_connectivity_length = 1;
+  for (size_t i = 0; i < SpatialDim; ++i) {
     size_t h_ref_start_position =
         grid_name_string.find("L", h_ref_previous_start_position + 1);
     size_t h_ref_end_position =
@@ -259,38 +265,37 @@ std::tuple<size_t, size_t, std::array<int, 3>> compute_block_level_properties(
         grid_name_string.substr(h_ref_start_position + 1,
                                 h_ref_end_position - h_ref_start_position - 1));
     h_ref_array[i] = h_ref;
+    additional_connectivity_length *= pow(2, h_ref + 1) - 1;
     h_ref_previous_start_position = h_ref_start_position;
   }
+
   expected_connectivity_length +=
-      ((pow(2, h_ref_array[0] + 1) - 1) * (pow(2, h_ref_array[1] + 1) - 1) *
-           (pow(2, h_ref_array[2] + 1) - 1) -
-       block_extents.size()) *
-      8;
+      (additional_connectivity_length - block_extents.size()) * 8;
 
   return std::tuple{expected_connectivity_length,
                     expected_number_of_grid_points, h_ref_array};
 }
 
 // Generates the mesh
-Mesh<3> generate_element_mesh(
+template <size_t SpatialDim>
+Mesh<SpatialDim> generate_element_mesh(
     const std::vector<std::string>& element_bases,
     const std::vector<std::string>& element_quadratures,
     const std::vector<size_t>& element_extents) {
-  std::array<Spectral::Basis, 3> basis_array = {
-      Spectral::to_basis(element_bases[0]),
-      Spectral::to_basis(element_bases[1]),
-      Spectral::to_basis(element_bases[2])};
+  std::array<Spectral::Basis, SpatialDim> basis_array;
 
-  std::array<Spectral::Quadrature, 3> quadrature_array = {
-      Spectral::to_quadrature(element_quadratures[0]),
-      Spectral::to_quadrature(element_quadratures[1]),
-      Spectral::to_quadrature(element_quadratures[2])};
+  std::array<Spectral::Quadrature, SpatialDim> quadrature_array;
 
-  std::array<size_t, 3> extents_array = {element_extents[0], element_extents[1],
-                                         element_extents[2]};
+  std::array<size_t, SpatialDim> extents_array;
+  for (size_t i = 0; i < SpatialDim; i++) {
+    basis_array[i] = Spectral::to_basis(element_bases[i]);
+    quadrature_array[i] = Spectral::to_quadrature(element_quadratures[i]);
+    extents_array[i] = element_extents[i];
+  }
 
-  return Mesh<3>{extents_array, basis_array, quadrature_array};
+  return Mesh<SpatialDim>{extents_array, basis_array, quadrature_array};
 }
+
 std::vector<std::array<double, 3>> generate_block_logical_coordinates(
     const std::vector<std::array<double, 3>>& element_logical_coordinates,
     const std::string& grid_name,
@@ -639,6 +644,7 @@ void VolumeData::write_tensor_component(
 }
 
 // Write new connectivity connections given a std::vector of observation ids
+template <size_t SpatialDim>
 void VolumeData::write_new_connectivity_data(
     const std::vector<size_t>& observation_ids, const bool& print_size) {
   for (size_t i = 0; i < observation_ids.size(); ++i) {
@@ -663,8 +669,9 @@ void VolumeData::write_new_connectivity_data(
     // Loop over blocks
     for (size_t j = 0; j < number_of_blocks; ++j) {
       auto [expected_connectivity_length, expected_number_of_grid_points,
-            h_ref_array] = compute_block_level_properties(sorted_grid_names[j],
-                                                          sorted_extents[j]);
+            h_ref_array] =
+          compute_block_level_properties<3>(sorted_grid_names[j],
+                                            sorted_extents[j]);
       total_expected_connectivity += expected_connectivity_length;
       expected_grid_points_per_block.push_back(expected_number_of_grid_points);
       h_ref_per_block.push_back(h_ref_array);
@@ -693,7 +700,7 @@ void VolumeData::write_new_connectivity_data(
     // Loop over elements
     for (size_t j = 0; j < block_number_for_each_element.size(); ++j) {
       auto element_mesh =
-          generate_element_mesh(bases[j], quadratures[j], extents[j]);
+          generate_element_mesh<3>(bases[j], quadratures[j], extents[j]);
       auto element_logical_coordinates_tensor =
           logical_coordinates(element_mesh);
 
@@ -703,10 +710,12 @@ void VolumeData::write_new_connectivity_data(
 
       for (size_t k = 0; k < element_logical_coordinates_tensor.get(0).size();
            ++k) {
-        element_logical_coordinates.push_back(std::array<double, 3>{
-            element_logical_coordinates_tensor.get(0)[k],
-            element_logical_coordinates_tensor.get(1)[k],
-            element_logical_coordinates_tensor.get(2)[k]});
+        std::array<double, 3> logical_coords_element_increment;
+        for (size_t l = 0; l < 3; l++) {
+          logical_coords_element_increment[l] =
+              element_logical_coordinates_tensor.get(l)[k];
+        }
+        element_logical_coordinates.push_back(logical_coords_element_increment);
       }
 
       auto block_logical_coordinates = generate_block_logical_coordinates(
