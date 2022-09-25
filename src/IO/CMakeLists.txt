@@ -29,6 +29,12 @@ target_link_libraries(
   DataStructures
   ErrorHandling
   Utilities
+  PRIVATE
+  Domain
+  Informer
+  INTERFACE
+  Spectral
+  SystemUtilities
   )
 
 add_subdirectory(H5)

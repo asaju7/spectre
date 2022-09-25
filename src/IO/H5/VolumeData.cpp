@@ -296,26 +296,28 @@ Mesh<SpatialDim> generate_element_mesh(
   return Mesh<SpatialDim>{extents_array, basis_array, quadrature_array};
 }
 
-std::vector<std::array<double, 3>> generate_block_logical_coordinates(
-    const std::vector<std::array<double, 3>>& element_logical_coordinates,
+template <size_t SpatialDim>
+std::vector<std::array<double, SpatialDim>> generate_block_logical_coordinates(
+    const std::vector<std::array<double, SpatialDim>>&
+        element_logical_coordinates,
     const std::string& grid_name,
-    const std::array<int, 3>& h_refinement_array) {
+    const std::array<int, SpatialDim>& h_refinement_array) {
   size_t grid_points_x_start_position = 0;
-  std::vector<std::array<double, 3>> block_logical_coordinates;
+  std::vector<std::array<double, SpatialDim>> block_logical_coordinates;
   block_logical_coordinates.reserve(element_logical_coordinates.size());
   std::vector<double> number_of_elements_each_direction;
-  number_of_elements_each_direction.reserve(3);  // Hardcoded for 3 dim
+  number_of_elements_each_direction.reserve(SpatialDim);  // Hardcoded for 3 dim
   std::vector<double> shift_each_direction;
-  shift_each_direction.reserve(3);  // Hardocded for 3 dim
+  shift_each_direction.reserve(SpatialDim);  // Hardocded for 3 dim
 
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < SpatialDim; ++i) {
     double number_of_elements = pow(2, h_refinement_array[i]);
     number_of_elements_each_direction.push_back(number_of_elements);
     size_t grid_points_start_position =
         grid_name.find("I", grid_points_x_start_position + 1);
     size_t grid_points_end_position =
         grid_name.find(",", grid_points_start_position);
-    if (i == 2) {
+    if (i == SpatialDim) {
       grid_points_end_position =
           grid_name.find(")", grid_points_start_position);
     }
@@ -328,7 +330,7 @@ std::vector<std::array<double, 3>> generate_block_logical_coordinates(
   }
 
   for (size_t i = 0; i < element_logical_coordinates.size(); ++i) {
-    std::array<double, 3> grid_point_coordinate;
+    std::array<double, SpatialDim> grid_point_coordinate;
     for (size_t j = 0; j < grid_point_coordinate.size(); ++j) {
       grid_point_coordinate[j] = 1 / number_of_elements_each_direction[j] *
                                      element_logical_coordinates[i][j] +
@@ -358,36 +360,88 @@ std::vector<double> sort_and_order(std::vector<double>& unsorted_coordinate) {
 }
 
 // Builds the connectivity by cube
-std::vector<std::pair<size_t, std::array<double, 3>>>
+template <size_t SpatialDim>
+std::vector<std::pair<size_t, std::array<double, SpatialDim>>>
 build_connectivity_by_hexahedron(std::vector<double>& sorted_x,
                                  std::vector<double>& sorted_y,
                                  std::vector<double>& sorted_z,
                                  size_t& block_number) {
-  std::vector<std::pair<size_t, std::array<double, 3>>> connectivity_of_keys;
+  std::vector<std::pair<size_t, std::array<double, SpatialDim>>>
+      connectivity_of_keys;
 
-  for (size_t k = 0; k < sorted_z.size() - 1; ++k) {
-    for (size_t j = 0; j < sorted_y.size() - 1; ++j) {
-      for (size_t i = 0; i < sorted_x.size() - 1; ++i) {
-        std::array point_one{sorted_x[i], sorted_y[j], sorted_z[k]};
-        std::array point_two{sorted_x[i + 1], sorted_y[j], sorted_z[k]};
-        std::array point_three{sorted_x[i + 1], sorted_y[j + 1], sorted_z[k]};
-        std::array point_four{sorted_x[i], sorted_y[j + 1], sorted_z[k]};
-        std::array point_five{sorted_x[i], sorted_y[j], sorted_z[k + 1]};
-        std::array point_six{sorted_x[i + 1], sorted_y[j], sorted_z[k + 1]};
-        std::array point_seven{sorted_x[i + 1], sorted_y[j + 1],
-                               sorted_z[k + 1]};
-        std::array point_eight{sorted_x[i], sorted_y[j + 1], sorted_z[k + 1]};
-        connectivity_of_keys.insert(
-            connectivity_of_keys.end(),
-            {std::make_pair(block_number, point_one),
-             std::make_pair(block_number, point_two),
-             std::make_pair(block_number, point_three),
-             std::make_pair(block_number, point_four),
-             std::make_pair(block_number, point_five),
-             std::make_pair(block_number, point_six),
-             std::make_pair(block_number, point_seven),
-             std::make_pair(block_number, point_eight)});
+  std::array<double, SpatialDim> point_one;
+  std::array<double, SpatialDim> point_two;
+  std::array<double, SpatialDim> point_three;
+  std::array<double, SpatialDim> point_four;
+  std::array<double, SpatialDim> point_five;
+  std::array<double, SpatialDim> point_six;
+  std::array<double, SpatialDim> point_seven;
+  std::array<double, SpatialDim> point_eight;
+
+  for (size_t i = 0; i < sorted_x.size() - 1; ++i) {
+    point_one[1] = sorted_x[i];
+    point_two[1] = sorted_x[i + 1];
+    if (SpatialDim > 1) {
+      point_three[1] = sorted_x[i + 1];
+      point_four[1] = sorted_x[i];
+      for (size_t j = 0; j < sorted_y.size() - 1; ++j) {
+        point_one[2] = sorted_y[j];
+        point_two[2] = sorted_y[j];
+        point_three[2] = sorted_y[j + 1];
+        point_four[2] = sorted_y[j + 1];
+        if (SpatialDim == 3) {
+          point_five[1] = sorted_x[i];
+          point_six[1] = sorted_x[i + 1];
+          point_seven[1] = sorted_x[i + 1];
+          point_eight[1] = sorted_x[i];
+          point_five[2] = sorted_y[j];
+          point_six[2] = sorted_y[j];
+          point_seven[2] = sorted_y[j + 1];
+          point_eight[2] = sorted_y[j + 1];
+          for (size_t k = 0; k < sorted_z.size() - 1; ++k) {
+            point_one[3] = sorted_z[k];
+            point_two[3] = sorted_z[k];
+            point_three[3] = sorted_z[k];
+            point_four[3] = sorted_z[k];
+            point_five[3] = sorted_z[k + 1];
+            point_six[3] = sorted_z[k + 1];
+            point_seven[3] = sorted_z[k + 1];
+            point_eight[3] = sorted_z[k + 1];
+            // std::array point_one{sorted_x[i], sorted_y[j], sorted_z[k]};
+            // std::array point_two{sorted_x[i + 1], sorted_y[j], sorted_z[k]};
+            // std::array point_three{sorted_x[i + 1], sorted_y[j + 1],
+            //                        sorted_z[k]};
+            // std::array point_four{sorted_x[i], sorted_y[j + 1], sorted_z[k]};
+            // std::array point_five{sorted_x[i], sorted_y[j], sorted_z[k + 1]};
+            // std::array point_six{sorted_x[i + 1], sorted_y[j], sorted_z[k +
+            // 1]}; std::array point_seven{sorted_x[i + 1], sorted_y[j + 1],
+            //                        sorted_z[k + 1]};
+            // std::array point_eight{sorted_x[i], sorted_y[j + 1],
+            //                        sorted_z[k + 1]};
+            connectivity_of_keys.insert(
+                connectivity_of_keys.end(),
+                {std::make_pair(block_number, point_one),
+                 std::make_pair(block_number, point_two),
+                 std::make_pair(block_number, point_three),
+                 std::make_pair(block_number, point_four),
+                 std::make_pair(block_number, point_five),
+                 std::make_pair(block_number, point_six),
+                 std::make_pair(block_number, point_seven),
+                 std::make_pair(block_number, point_eight)});
+          }
+        } else {
+          connectivity_of_keys.insert(
+              connectivity_of_keys.end(),
+              {std::make_pair(block_number, point_one),
+               std::make_pair(block_number, point_two),
+               std::make_pair(block_number, point_three),
+               std::make_pair(block_number, point_four)});
+        }
       }
+    } else {
+      connectivity_of_keys.insert(connectivity_of_keys.end(),
+                                  {std::make_pair(block_number, point_one),
+                                   std::make_pair(block_number, point_two)});
     }
   }
   return connectivity_of_keys;
@@ -412,8 +466,8 @@ std::vector<std::pair<size_t, std::array<double, 3>>> generate_new_connectivity(
   auto ordered_x = sort_and_order(unsorted_coordinates[0]);
   auto ordered_y = sort_and_order(unsorted_coordinates[1]);
   auto ordered_z = sort_and_order(unsorted_coordinates[2]);
-  return build_connectivity_by_hexahedron(ordered_x, ordered_y, ordered_z,
-                                          block_number);
+  return build_connectivity_by_hexahedron<3>(ordered_x, ordered_y, ordered_z,
+                                             block_number);
 }
 }  // namespace
 
@@ -644,7 +698,7 @@ void VolumeData::write_tensor_component(
 }
 
 // Write new connectivity connections given a std::vector of observation ids
-template <size_t SpatialDim>
+// template <size_t SpatialDim>
 void VolumeData::write_new_connectivity_data(
     const std::vector<size_t>& observation_ids, const bool& print_size) {
   for (size_t i = 0; i < observation_ids.size(); ++i) {
@@ -718,7 +772,7 @@ void VolumeData::write_new_connectivity_data(
         element_logical_coordinates.push_back(logical_coords_element_increment);
       }
 
-      auto block_logical_coordinates = generate_block_logical_coordinates(
+      auto block_logical_coordinates = generate_block_logical_coordinates<3>(
           element_logical_coordinates, grid_names[j],
           h_ref_per_block[block_number_for_each_element[j]]);
 
