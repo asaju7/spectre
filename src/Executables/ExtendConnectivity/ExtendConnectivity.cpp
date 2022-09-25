@@ -7,15 +7,9 @@
 #include <string>
 #include <vector>
 
-#include "DataStructures/DataVector.hpp"
-#include "DataStructures/Tensor/Tensor.hpp"
-#include "Domain/LogicalCoordinates.hpp"
 #include "IO/H5/AccessType.hpp"
 #include "IO/H5/File.hpp"
-#include "IO/H5/Helpers.hpp"
 #include "IO/H5/VolumeData.hpp"
-#include "NumericalAlgorithms/Spectral/Mesh.hpp"
-#include "NumericalAlgorithms/Spectral/Spectral.hpp"
 #include "Parallel/Printf.hpp"
 
 // Charm looks for this function but since we build without a main function or
@@ -29,7 +23,6 @@ void extend_connectivity(const std::string& file_name,
   auto& volume_file = data_file.get<h5::VolumeData>("/" + subfile_name);
   const std::vector<size_t>& observation_ids =
       volume_file.list_observation_ids();
-
   volume_file.write_new_connectivity_data(observation_ids, print_size);
 }
 

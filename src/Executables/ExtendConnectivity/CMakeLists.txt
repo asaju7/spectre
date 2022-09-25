@@ -14,9 +14,6 @@ target_link_libraries(
   PRIVATE
   Boost::boost
   Boost::program_options
-  DataStructures
-  Domain
   IO
   Parallel
-  Spectral
   )
