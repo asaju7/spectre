@@ -172,16 +172,16 @@ void append_element_extents_and_connectivity(
 // and also returns a std::vector of block numbers that is a one-to-one mapping
 // to each element in grid_names
 std::tuple<size_t, std::vector<size_t>, std::vector<std::vector<size_t>>>
-compute_and_organize_block_info(std::vector<std::string>& grid_names) {
+compute_and_organize_block_info(const std::vector<std::string>& grid_names) {
   std::vector<size_t> block_number_for_each_element;
   std::vector<std::vector<size_t>> sorted_element_indices;
   block_number_for_each_element.reserve(grid_names.size());
 
   // Fills block_number_for_each_element
-  for (size_t i = 0; i < grid_names.size(); ++i) {
-    size_t end_position = grid_names[i].find(",", 1);
+  for (const std::string& grid_name : grid_names) {
+    size_t end_position = grid_name.find(',', 1);
     block_number_for_each_element.push_back(
-        static_cast<size_t>(std::stoi(grid_names[i].substr(2, end_position))));
+        static_cast<size_t>(std::stoi(grid_name.substr(2, end_position))));
   }
 
   auto max_block_number =
@@ -218,11 +218,11 @@ std::vector<std::vector<T>> sort_by_block(
   sorted_property.reserve(sorted_element_indices.size());
 
   // Properly sizes subvectors
-  for (size_t i = 0; i < sorted_element_indices.size(); ++i) {
+  for (const auto& sorted_block_index : sorted_element_indices) {
     std::vector<T> sizing_vector;
-    sizing_vector.reserve(sorted_element_indices[i].size());
-    for (size_t j = 0; j < sorted_element_indices[i].size(); ++j) {
-      sizing_vector.push_back(property_to_sort[sorted_element_indices[i][j]]);
+    sizing_vector.reserve(sorted_block_index.size());
+    for (const auto& sorted_element_index : sorted_block_index) {
+      sizing_vector.push_back(property_to_sort[sorted_element_index]);
     }
     sorted_property.push_back(sizing_vector);
   }
@@ -239,12 +239,12 @@ compute_block_level_properties(
   size_t expected_connectivity_length = 0;
   size_t expected_number_of_grid_points = 0;
 
-  for (size_t i = 0; i < block_extents.size(); ++i) {
+  for (const auto& extents : block_extents) {
     size_t element_grid_points = 1;
     size_t element_connectivity_length = 1;
     for (size_t j = 0; j < SpatialDim; j++) {
-      element_grid_points *= block_extents[i][j];
-      element_connectivity_length *= block_extents[i][j] - 1;
+      element_grid_points *= extents[j];
+      element_connectivity_length *= extents[j] - 1;
     }
     // Connectivity that already exists
     expected_connectivity_length += element_connectivity_length * 8;
@@ -253,14 +253,14 @@ compute_block_level_properties(
   }
 
   std::string grid_name_string = block_grid_names[0];
-  std::array<int, SpatialDim> h_ref_array;
+  std::array<int, SpatialDim> h_ref_array = {};
   size_t h_ref_previous_start_position = 0;
   size_t additional_connectivity_length = 1;
   for (size_t i = 0; i < SpatialDim; ++i) {
     size_t h_ref_start_position =
-        grid_name_string.find("L", h_ref_previous_start_position + 1);
+        grid_name_string.find('L', h_ref_previous_start_position + 1);
     size_t h_ref_end_position =
-        grid_name_string.find("I", h_ref_start_position);
+        grid_name_string.find('I', h_ref_start_position);
     int h_ref = std::stoi(
         grid_name_string.substr(h_ref_start_position + 1,
                                 h_ref_end_position - h_ref_start_position - 1));
@@ -282,11 +282,12 @@ Mesh<SpatialDim> generate_element_mesh(
     const std::vector<std::string>& element_bases,
     const std::vector<std::string>& element_quadratures,
     const std::vector<size_t>& element_extents) {
-  std::array<Spectral::Basis, SpatialDim> basis_array;
+  std::array<Spectral::Basis, SpatialDim> basis_array = {};
 
-  std::array<Spectral::Quadrature, SpatialDim> quadrature_array;
+  std::array<Spectral::Quadrature, SpatialDim> quadrature_array = {};
 
-  std::array<size_t, SpatialDim> extents_array;
+  std::array<size_t, SpatialDim> extents_array = {};
+
   for (size_t i = 0; i < SpatialDim; i++) {
     basis_array[i] = Spectral::to_basis(element_bases[i]);
     quadrature_array[i] = Spectral::to_quadrature(element_quadratures[i]);
@@ -314,12 +315,12 @@ std::vector<std::array<double, SpatialDim>> generate_block_logical_coordinates(
     double number_of_elements = pow(2, h_refinement_array[i]);
     number_of_elements_each_direction.push_back(number_of_elements);
     size_t grid_points_start_position =
-        grid_name.find("I", grid_points_x_start_position + 1);
+        grid_name.find('I', grid_points_x_start_position + 1);
     size_t grid_points_end_position =
-        grid_name.find(",", grid_points_start_position);
+        grid_name.find(',', grid_points_start_position);
     if (i == SpatialDim) {
       grid_points_end_position =
-          grid_name.find(")", grid_points_start_position);
+          grid_name.find(')', grid_points_start_position);
     }
     int element_index = std::stoi(grid_name.substr(
         grid_points_start_position + 1,
@@ -330,7 +331,7 @@ std::vector<std::array<double, SpatialDim>> generate_block_logical_coordinates(
   }
 
   for (size_t i = 0; i < element_logical_coordinates.size(); ++i) {
-    std::array<double, SpatialDim> grid_point_coordinate;
+    std::array<double, SpatialDim> grid_point_coordinate = {};
     for (size_t j = 0; j < grid_point_coordinate.size(); ++j) {
       grid_point_coordinate[j] = 1 / number_of_elements_each_direction[j] *
                                      element_logical_coordinates[i][j] +
@@ -362,21 +363,21 @@ std::vector<double> sort_and_order(std::vector<double>& unsorted_coordinate) {
 // Builds the connectivity by cube
 template <size_t SpatialDim>
 std::vector<std::pair<size_t, std::array<double, SpatialDim>>>
-build_connectivity_by_hexahedron(std::vector<double>& sorted_x,
-                                 std::vector<double>& sorted_y,
-                                 std::vector<double>& sorted_z,
-                                 size_t& block_number) {
+build_connectivity_by_hexahedron(const std::vector<double>& sorted_x,
+                                 const std::vector<double>& sorted_y,
+                                 const std::vector<double>& sorted_z,
+                                 const size_t& block_number) {
   std::vector<std::pair<size_t, std::array<double, SpatialDim>>>
       connectivity_of_keys;
 
-  std::array<double, SpatialDim> point_one;
-  std::array<double, SpatialDim> point_two;
-  std::array<double, SpatialDim> point_three;
-  std::array<double, SpatialDim> point_four;
-  std::array<double, SpatialDim> point_five;
-  std::array<double, SpatialDim> point_six;
-  std::array<double, SpatialDim> point_seven;
-  std::array<double, SpatialDim> point_eight;
+  std::array<double, SpatialDim> point_one = {};
+  std::array<double, SpatialDim> point_two = {};
+  std::array<double, SpatialDim> point_three = {};
+  std::array<double, SpatialDim> point_four = {};
+  std::array<double, SpatialDim> point_five = {};
+  std::array<double, SpatialDim> point_six = {};
+  std::array<double, SpatialDim> point_seven = {};
+  std::array<double, SpatialDim> point_eight = {};
 
   for (size_t i = 0; i < sorted_x.size() - 1; ++i) {
     point_one[0] = sorted_x[i];
@@ -442,7 +443,7 @@ template <size_t SpatialDim>
 std::vector<std::pair<size_t, std::array<double, SpatialDim>>>
 generate_new_connectivity(
     std::vector<std::array<double, SpatialDim>>& block_logical_coordinates,
-    size_t& block_number) {
+    const size_t& block_number) {
   std::vector<std::vector<double>> unsorted_coordinates;
   unsorted_coordinates.reserve(SpatialDim);
 
@@ -701,8 +702,7 @@ void VolumeData::write_tensor_component(
 template <size_t SpatialDim>
 void VolumeData::extend_connectivity_data(
     const std::vector<size_t>& observation_ids, const bool& print_size) {
-  for (size_t i = 0; i < observation_ids.size(); ++i) {
-    auto obs_id = observation_ids[i];
+  for (const size_t& obs_id : observation_ids) {
     auto grid_names = get_grid_names(obs_id);
     auto extents = get_extents(obs_id);
     auto bases = get_bases(obs_id);
@@ -743,9 +743,9 @@ void VolumeData::extend_connectivity_data(
     block_logical_coordinates_by_block.reserve(number_of_blocks);
 
     // Reserve size for the subvectors
-    for (size_t j = 0; j < sorted_element_indices.size(); ++j) {
+    for (const auto& sorted_block_index : sorted_element_indices) {
       std::vector<std::array<double, SpatialDim>> sizing_vector;
-      sizing_vector.reserve(sorted_element_indices[j].size());
+      sizing_vector.reserve(sorted_block_index.size());
       block_logical_coordinates_by_block.push_back(sizing_vector);
     }
 
@@ -765,7 +765,7 @@ void VolumeData::extend_connectivity_data(
 
       for (size_t k = 0; k < element_logical_coordinates_tensor.get(0).size();
            ++k) {
-        std::array<double, SpatialDim> logical_coords_element_increment;
+        std::array<double, SpatialDim> logical_coords_element_increment = {};
         for (size_t l = 0; l < SpatialDim; l++) {
           logical_coords_element_increment[l] =
               element_logical_coordinates_tensor.get(l)[k];
@@ -806,6 +806,12 @@ void VolumeData::extend_connectivity_data(
       }
     }
 
+    for (const int i : new_connectivity){
+      std::cout << i << ", ";
+    }
+
+    std::cout << '\n';
+
     // Deletes the existing connectivity and replaces it with the new one
     const std::string path = "ObservationId" + std::to_string(obs_id);
     detail::OpenGroup observation_group(volume_data_group_.id(), path,
@@ -813,7 +819,7 @@ void VolumeData::extend_connectivity_data(
     const hid_t group_id = observation_group.id();
     H5Ldelete(group_id, "connectivity", H5P_DEFAULT);
     write_connectivity(group_id, new_connectivity);
-    if (print_size == true) {
+    if (print_size) {
       std::cout << "connectivity length: " << new_connectivity.size() << "\n";
     }
   }
