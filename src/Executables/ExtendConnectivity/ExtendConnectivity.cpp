@@ -23,7 +23,21 @@ void extend_connectivity(const std::string& file_name,
   auto& volume_file = data_file.get<h5::VolumeData>("/" + subfile_name);
   const std::vector<size_t>& observation_ids =
       volume_file.list_observation_ids();
-  volume_file.write_new_connectivity_data(observation_ids, print_size);
+  const size_t dim = volume_file.get_extents(observation_ids[0])[0].size();
+
+  switch (dim) {
+    case 1:
+      volume_file.extend_connectivity_data<1>(observation_ids, print_size);
+      break;
+    case 2:
+      volume_file.extend_connectivity_data<2>(observation_ids, print_size);
+      break;
+    case 3:
+      volume_file.extend_connectivity_data<3>(observation_ids, print_size);
+      break;
+    default:
+      ERROR("Invalid dimensionality");
+  }
 }
 
 /*
@@ -63,7 +77,7 @@ int main(int argc, char** argv) {
   if (vars.count("help") != 0u or vars.count("file_name") == 0u or
       vars.count("subfile_name") == 0u) {
     Parallel::printf("%s\n", desc);
-    return 0;
+    return 1;
   }
 
   extend_connectivity(vars["file_name"].as<std::string>(),

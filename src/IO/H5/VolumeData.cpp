@@ -698,9 +698,9 @@ void VolumeData::write_tensor_component(
 }
 
 // Write new connectivity connections given a std::vector of observation ids
-void VolumeData::write_new_connectivity_data(
+template <size_t SpatialDim>
+void VolumeData::extend_connectivity_data(
     const std::vector<size_t>& observation_ids, const bool& print_size) {
-  const size_t SpatialDim = 3;
   for (size_t i = 0; i < observation_ids.size(); ++i) {
     auto obs_id = observation_ids[i];
     auto grid_names = get_grid_names(obs_id);
@@ -1189,3 +1189,14 @@ GENERATE_INSTANTIATIONS(INSTANTIATE, (1, 2, 3))
 #undef DIM
 
 }  // namespace h5
+
+#define DIM(data) BOOST_PP_TUPLE_ELEM(0, data)
+
+#define INSTANTIATE(_, data)                                 \
+  template void h5::VolumeData::extend_connectivity_data<DIM(data)>( \
+      const std::vector<size_t>& observation_ids, const bool& print_size);
+
+GENERATE_INSTANTIATIONS(INSTANTIATE, (1, 2, 3))
+
+#undef INSTANTIATE
+#undef DIM
