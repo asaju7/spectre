@@ -806,12 +806,6 @@ void VolumeData::extend_connectivity_data(
       }
     }
 
-    for (const int i : new_connectivity){
-      std::cout << i << ", ";
-    }
-
-    std::cout << '\n';
-
     // Deletes the existing connectivity and replaces it with the new one
     const std::string path = "ObservationId" + std::to_string(obs_id);
     detail::OpenGroup observation_group(volume_data_group_.id(), path,
@@ -1198,7 +1192,7 @@ GENERATE_INSTANTIATIONS(INSTANTIATE, (1, 2, 3))
 
 #define DIM(data) BOOST_PP_TUPLE_ELEM(0, data)
 
-#define INSTANTIATE(_, data)                                 \
+#define INSTANTIATE(_, data)                                         \
   template void h5::VolumeData::extend_connectivity_data<DIM(data)>( \
       const std::vector<size_t>& observation_ids, const bool& print_size);
 
