@@ -27,6 +27,7 @@ target_link_libraries(
   ${LIBRARY}
   PUBLIC
   DataStructures
+  Domain
   ErrorHandling
   Utilities
   )
