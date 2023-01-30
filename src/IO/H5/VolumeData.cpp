@@ -168,7 +168,14 @@ void append_element_extents_and_connectivity(
 }
 // Given a std::vector of grid_names, computes the number of blocks that exist
 // and also returns a std::vector of block numbers that is a one-to-one mapping
-// to each element in grid_names
+// to each element in grid_names. The returned tuple is of the form
+// [number_of_blocks, block_number_for_each_element, sorted_element_indices].
+// number_of_blocks is equal to the number of blocks in the domain.
+// block_number_for_each_element is a std::vector with length equal to the total
+// number of grid names. sorted_element_indices is a std::vector<std::vector>
+// with length equal to the number of blocks in the domain, since each subvector
+// represents a given block. These subvectors are of a length equal to the
+// number of elements which belong to that corresponding block.
 std::tuple<size_t, std::vector<size_t>, std::vector<std::vector<size_t>>>
 compute_and_organize_block_info(const std::vector<std::string>& grid_names) {
   std::vector<size_t> block_number_for_each_element;
@@ -182,7 +189,7 @@ compute_and_organize_block_info(const std::vector<std::string>& grid_names) {
         static_cast<size_t>(std::stoi(grid_name.substr(2, end_position))));
   }
 
-  auto max_block_number =
+  const auto max_block_number =
       *std::max_element(block_number_for_each_element.begin(),
                         block_number_for_each_element.end());
   auto number_of_blocks = max_block_number + 1;
@@ -191,10 +198,10 @@ compute_and_organize_block_info(const std::vector<std::string>& grid_names) {
   // Properly sizes subvectors of sorted_element_indices
   for (size_t i = 0; i < number_of_blocks; ++i) {
     std::vector<size_t> sizing_vector;
-    auto grid_names_in_block =
+    auto number_of_elements_in_block =
         static_cast<size_t>(std::count(block_number_for_each_element.begin(),
                                        block_number_for_each_element.end(), i));
-    sizing_vector.reserve(grid_names_in_block);
+    sizing_vector.reserve(number_of_elements_in_block);
     sorted_element_indices.push_back(sizing_vector);
   }
 
@@ -203,8 +210,9 @@ compute_and_organize_block_info(const std::vector<std::string>& grid_names) {
     sorted_element_indices[block_number_for_each_element[i]].push_back(i);
   }
 
-  return std::make_tuple(number_of_blocks, block_number_for_each_element,
-                         sorted_element_indices);
+  return std::make_tuple(std::move(number_of_blocks),
+                         std::move(block_number_for_each_element),
+                         std::move(sorted_element_indices));
 }
 
 // Sort input by block
@@ -222,13 +230,22 @@ std::vector<std::vector<T>> sort_by_block(
     for (const auto& sorted_element_index : sorted_block_index) {
       sizing_vector.push_back(property_to_sort[sorted_element_index]);
     }
-    sorted_property.push_back(sizing_vector);
+    sorted_property.push_back(std::move(sizing_vector));
   }
 
   return sorted_property;
 }
 
-// Returns properties for each block
+// Returns a std::tuple of the form
+// [expected_connectivity_length, expected_number_of_grid_points, h_ref_array],
+// where each of the quantities in the tuple is computed for each block
+// individually. expected_connectivity_length is the expected length of the
+// connectivity for the given block. expected_number_of_grid_points is the
+// number of grid points that are expected to be within the block. h_ref_array
+// is an array of the h-refinement in the x, y, and z directions. This function
+// computes properties at the block level, as our algorithm for constructing the
+// new connectivity works within a block, making it convenient to sort these
+// properties early.
 template <size_t SpatialDim>
 std::tuple<size_t, size_t, std::array<int, SpatialDim>>
 compute_block_level_properties(
@@ -709,8 +726,9 @@ void VolumeData::extend_connectivity_data(
     auto [number_of_blocks, block_number_for_each_element,
           sorted_element_indices] = compute_and_organize_block_info(grid_names);
 
-    auto sorted_grid_names = sort_by_block(sorted_element_indices, grid_names);
-    auto sorted_extents = sort_by_block(sorted_element_indices, extents);
+    const auto sorted_grid_names =
+        sort_by_block(sorted_element_indices, grid_names);
+    const auto sorted_extents = sort_by_block(sorted_element_indices, extents);
 
     size_t total_expected_connectivity = 0;
     std::vector<int> expected_grid_points_per_block;
@@ -729,13 +747,20 @@ void VolumeData::extend_connectivity_data(
       h_ref_per_block.push_back(h_ref_array);
     }
 
-    // Instantiates the unordered_map
+    // Create an unordered_map to be used to associate a grid point's block
+    // number and coordinates as an array to the its label
+    // (B#, grid_point_coord_array) -> grid_point_number
     std::unordered_map<
         std::pair<size_t, std::array<double, SpatialDim>>, size_t,
         boost::hash<std::pair<size_t, std::array<double, SpatialDim>>>>
         block_and_grid_point_map;
 
-    // Instantiates the sorted container for the grid points
+    // Create the sorted container for the grid points, which is a
+    // std::vector<std::vector>. The length of the first layer has length equal
+    // to the number of blocks, as each subvector corresponds to one of the
+    // blocks. Each subvector is of length equal to the number of grid points
+    // in the corresponding block, as we are storing an array of the block
+    // logical coordinates for each grid point.
     std::vector<std::vector<std::array<double, SpatialDim>>>
         block_logical_coordinates_by_block;
     block_logical_coordinates_by_block.reserve(number_of_blocks);
@@ -747,13 +772,18 @@ void VolumeData::extend_connectivity_data(
       block_logical_coordinates_by_block.push_back(sizing_vector);
     }
 
-    // Counter for the unordered_map
-    size_t grid_point_counter = 0;
+    // Counter for the grid points when filling the unordered_map. Grid points
+    // are labelled by positive integers, so we are numbering them with this
+    // counter as we associate them to the key (B#, grid_point_coord_array) in
+    // the unordered map.
+    size_t grid_point_number = 0;
 
-    // Loop over elements
-    for (size_t j = 0; j < block_number_for_each_element.size(); ++j) {
+    for (size_t element_index = 0;
+         element_index < block_number_for_each_element.size();
+         ++element_index) {
       auto element_mesh = generate_element_mesh<SpatialDim>(
-          bases[j], quadratures[j], extents[j]);
+          bases[element_index], quadratures[element_index],
+          extents[element_index]);
       auto element_logical_coordinates_tensor =
           logical_coordinates(element_mesh);
 
@@ -773,21 +803,23 @@ void VolumeData::extend_connectivity_data(
 
       auto block_logical_coordinates =
           generate_block_logical_coordinates<SpatialDim>(
-              element_logical_coordinates, grid_names[j],
-              h_ref_per_block[block_number_for_each_element[j]]);
+              element_logical_coordinates, grid_names[element_index],
+              h_ref_per_block[block_number_for_each_element[element_index]]);
 
       // Stores (B#, grid_point_coord_array) -> grid_point_number in an
       // unordered_map and grid_point_coord_array by block
       for (size_t k = 0; k < block_logical_coordinates.size(); ++k) {
         std::pair<size_t, std::array<double, SpatialDim>> block_and_grid_point(
-            block_number_for_each_element[j], block_logical_coordinates[k]);
+            block_number_for_each_element[element_index],
+            block_logical_coordinates[k]);
         block_and_grid_point_map.insert(
             std::pair<std::pair<size_t, std::array<double, SpatialDim>>,
-                      size_t>(block_and_grid_point, grid_point_counter));
-        grid_point_counter += 1;
+                      size_t>(block_and_grid_point, grid_point_number));
+        grid_point_number += 1;
 
-        block_logical_coordinates_by_block[block_number_for_each_element[j]]
-            .push_back(block_logical_coordinates[k]);
+        block_logical_coordinates_by_block
+            [block_number_for_each_element[element_index]]
+                .push_back(block_logical_coordinates[k]);
       }
     }
 

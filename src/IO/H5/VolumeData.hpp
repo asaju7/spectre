@@ -123,8 +123,9 @@ class VolumeData : public h5::Object {
                               const std::string& component_name,
                               const std::vector<float>& contiguous_tensor_data);
 
-  /// Writes new connectivity within each block in the domain for each
-  /// observation id in a list of observation id's
+  /// Overwrites the current connectivity dataset with a new one. This new
+  /// connectivity dataset builds connectivity within each block in the domain
+  /// for each observation id in a list of observation id's
   template <size_t SpatialDim>
   void extend_connectivity_data(const std::vector<size_t>& observation_ids);
 
