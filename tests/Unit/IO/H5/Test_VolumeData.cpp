@@ -524,6 +524,11 @@ void test_extend_connectivity_data() {
   std::sort(expected_connectivity.begin(), expected_connectivity.end());
 
   CHECK(file_connectivity == expected_connectivity);
+
+  // Remove all the created files
+  if (file_system::check_if_file_exists(h5_file_name)) {
+    file_system::rm(h5_file_name, true);
+  }
 }
 
 }  // namespace
