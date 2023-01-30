@@ -9,8 +9,6 @@ spectre_python_add_module(
   PYTHON_FILES
   __init__.py
   ApplyPointwise.py
-  
-  PYTHON_EXECUTABLES
   ExtendConnectivity.py
   GenerateXdmf.py
   InterpolateToCoords.py
