@@ -431,8 +431,8 @@ void test_extend_connectivity_data() {
         ERROR("Invalid dimensionality");
     }
 
-    element_data[i] = {extents[i], tensor_components[i], bases[i],
-                       quadratures[i], grid_names[i]};
+    element_data[i] = {grid_names[i], tensor_components[i],
+    extents[i], bases[i], quadratures[i]};
   }  // End of sample volume data
 
   const std::string h5_file_name("Unit.IO.H5.VolumeData.h5");
