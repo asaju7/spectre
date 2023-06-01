@@ -19,8 +19,6 @@
 
 #include "DataStructures/DataVector.hpp"
 #include "DataStructures/Tensor/Tensor.hpp"
-#include "DataStructures/Tensor/TensorData.hpp"
-#include "Domain/LogicalCoordinates.hpp"
 #include "IO/Connectivity.hpp"
 #include "IO/H5/AccessType.hpp"
 #include "IO/H5/Header.hpp"
@@ -29,6 +27,7 @@
 #include "IO/H5/TensorData.hpp"
 #include "IO/H5/Type.hpp"
 #include "IO/H5/Version.hpp"
+#include "NumericalAlgorithms/Spectral/LogicalCoordinates.hpp"
 #include "NumericalAlgorithms/Spectral/Mesh.hpp"
 #include "NumericalAlgorithms/Spectral/Spectral.hpp"
 #include "Utilities/Algorithm.hpp"
@@ -294,8 +293,8 @@ compute_block_level_properties(
 // Generates the mesh
 template <size_t SpatialDim>
 Mesh<SpatialDim> generate_element_mesh(
-    const std::vector<std::string>& element_bases,
-    const std::vector<std::string>& element_quadratures,
+    const std::vector<Spectral::Basis>& element_bases,
+    const std::vector<Spectral::Quadrature>& element_quadratures,
     const std::vector<size_t>& element_extents) {
   std::array<Spectral::Basis, SpatialDim> basis_array = {};
 
@@ -303,9 +302,10 @@ Mesh<SpatialDim> generate_element_mesh(
 
   std::array<size_t, SpatialDim> extents_array = {};
 
+  // I think this can be removed
   for (size_t i = 0; i < SpatialDim; i++) {
-    basis_array[i] = Spectral::to_basis(element_bases[i]);
-    quadrature_array[i] = Spectral::to_quadrature(element_quadratures[i]);
+    basis_array[i] = element_bases[i];
+    quadrature_array[i] = element_quadratures[i];
     extents_array[i] = element_extents[i];
   }
 
