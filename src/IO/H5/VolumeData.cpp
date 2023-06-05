@@ -19,6 +19,7 @@
 
 #include "DataStructures/DataVector.hpp"
 #include "DataStructures/Tensor/Tensor.hpp"
+#include "Domain/Structure/SegmentId.hpp"
 #include "IO/Connectivity.hpp"
 #include "IO/H5/AccessType.hpp"
 #include "IO/H5/Header.hpp"
@@ -42,6 +43,8 @@
 #include "Utilities/MakeString.hpp"
 #include "Utilities/Numeric.hpp"
 #include "Utilities/StdHelpers.hpp"
+
+#include <iostream>
 
 namespace h5 {
 namespace {
@@ -355,6 +358,14 @@ std::vector<std::array<double, SpatialDim>> generate_block_logical_coordinates(
     block_logical_coordinates.push_back(grid_point_coordinate);
   }
 
+  for (const auto& gridpoint_BLCs : block_logical_coordinates) {
+    std::cout << "array size: " << gridpoint_BLCs.size() << '\n';
+    std::cout << "{" << gridpoint_BLCs[0] << ", " << gridpoint_BLCs[1] << ", "
+              << gridpoint_BLCs[2] << "}" << '\n';
+  }
+  std::cout << "number of gridpoints: " << block_logical_coordinates.size()
+            << '\n';
+
   return block_logical_coordinates;
 }
 
@@ -373,6 +384,56 @@ std::vector<double> sort_and_order(std::vector<double>& unsorted_coordinate) {
     }
   }
   return sorted_coordinate;
+}
+
+// David BLC of all gridpoints in element:
+
+/*std::vector<std::array<double, SpatialDim>> BLC_in_element(
+    std::array<SegmentId, SpatialDim> element,
+    std::vector<std::array<double, SpatialDim>> BLC);*/
+// Sorted in ascending z then y then x
+
+// Neighbour direction: +/- 1,2,3 for x,y,z
+
+template <size_t SpatialDim>
+std::pair<size_t, size_t> gridpoints_BLCs_dim_offsets(
+    std::vector<std::array<double, SpatialDim>> element_gridpoints_BLCs) {
+  int y_init = element_gridpoints_BLCs[0][1];
+  int x_init = element_gridpoints_BLCs[0][0];
+
+  auto is_equal = [element_gridpoints_BLCs](
+                      std::array<double, SpatialDim> gridpoint_BLCs,
+                      size_t index) {
+    return gridpoint_BLCs[index] == element_gridpoints_BLCs[0][index];
+  };
+
+  size_t y_offset_index = alg::find_if_not(
+      element_gridpoints_BLCs.begin(), element_gridpoints_BLCs.end(),
+      std::bind(is_equal, std::placeholders::_1, 1));
+  size_t x_offset_index = alg::find_if_not(
+      element_gridpoints_BLCs.begin(), element_gridpoints_BLCs.end(),
+      std::bind(is_equal, std::placeholders::_1, 0));
+
+  return std::make_pair(x_offset_index, y_offset_index);
+}
+
+template <size_t SpatialDim>
+std::vector<size_t> convert_BLC_to_gridpoint_label(
+    size_t block_num,
+    std::vector<std::array<double, SpatialDim>> element_gridpoints_BLCs,
+    std::unordered_map<
+        std::pair<size_t, std::array<double, SpatialDim>>, size_t,
+        boost::hash<std::pair<size_t, std::array<double, SpatialDim>>>>
+        gridpoint_label_map) {
+  std::vector<size_t> element_gridpoints_labels;
+  std::pair<size_t, std::array<double, SpatialDim>> key;
+
+  for (const auto& gridpoint : element_gridpoints_BLCs) {
+    key = {block_num, gridpoint};
+    element_gridpoints_labels.push_back(gridpoint_label_map.at(key));
+  }
+
+  return element_gridpoints_labels;
 }
 
 // Builds the connectivity by cube

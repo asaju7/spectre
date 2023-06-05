@@ -31,6 +31,8 @@
 #include "Utilities/FileSystem.hpp"
 #include "Utilities/Serialization/Serialize.hpp"
 
+#include <iostream>
+
 namespace {
 void test_strahlkorper() {
   constexpr size_t l_max = 12;
@@ -303,6 +305,7 @@ void test() {
 
 template <size_t SpatialDim>
 void test_extend_connectivity_data() {
+  std::cout << "SpatialDim: " << SpatialDim << '\n';
   // Sample volume data
   const std::vector<size_t>& observation_ids{2345};
   const std::vector<double>& observation_values{1.0};
@@ -432,8 +435,8 @@ void test_extend_connectivity_data() {
         ERROR("Invalid dimensionality");
     }
 
-    element_data[i] = {extents[i], tensor_components[i], bases[i],
-                       quadratures[i], grid_names[i]};
+    element_data[i] = {grid_names[i], tensor_components[i], extents[i],
+                       bases[i], quadratures[i]};
   }  // End of sample volume data
 
   const std::string h5_file_name("Unit.IO.H5.VolumeData.h5");
