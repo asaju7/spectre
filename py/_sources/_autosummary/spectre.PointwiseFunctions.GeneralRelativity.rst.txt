@@ -1,0 +1,29 @@
+spectre.PointwiseFunctions.GeneralRelativity
+============================================
+
+.. automodule:: spectre.PointwiseFunctions.GeneralRelativity
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+.. automodule:: spectre.PointwiseFunctions.GeneralRelativity._Pybindings
+
+.. currentmodule:: spectre.PointwiseFunctions.GeneralRelativity
+
+
+
+
