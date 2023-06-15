@@ -448,16 +448,20 @@ std::vector<size_t> convert_BLC_to_gridpoint_label(
 template <size_t SpatialDim>
 std::vector<std::array<double, SpatialDim>> get_element_face(
     std::vector<std::array<double, SpatialDim>>& element_gridpoints_BLCs,
-    size_t index) {
-  const double& max_value = element_gridpoints_BLCs.back()[index];
+    size_t index, bool positive_normal) {
+  const double& threshold_value = positive_normal
+                                      ? element_gridpoints_BLCs.back()[index]
+                                      : element_gridpoints_BLCs.front()[index];
 
-  std::vector<std::array<double, SpatialDim>> element_face =
-      std::erase_if(element_gridpoints_BLCs,
-                    [max_value](std::array<double, SpatialDim> gridpoint_BLCs) {
-                      return gridpoint_BLCs[index] != max_value;
-                    });
+  std::vector<std::array<double, SpatialDim>> element_face = std::erase_if(
+      element_gridpoints_BLCs,
+      [threshold_value](std::array<double, SpatialDim> gridpoint_BLCs) {
+        return gridpoint_BLCs[index] != threshold_value;
+      });
   return element_face;
 }
+
+template <size_t SpatialDim>
 
 template <size_t SpatialDim>
 std::vector<size_t> build_new_connectivity_by_hexahedron(
@@ -467,6 +471,7 @@ std::vector<size_t> build_new_connectivity_by_hexahedron(
     std::array<size_t, SpatialDim> connection_dir) {
   const size_t& num_of_gridpoints = element_gridpoints_BLCs.size();
 
+  //(x,y) offsets
   const std::pair<size_t, size_t>& element_dim_offsets =
       gridpoints_BLCs_dim_offsets(element_gridpoints_BLCs);
   const std::pair<size_t, size_t>& neighbour_element_dim_offsets =
@@ -489,17 +494,62 @@ std::vector<size_t> build_new_connectivity_by_hexahedron(
   std::vector<size_t> connection_indices(num_of_gridpoints);
   std::iota(connection_indices.begin(), connection_indices.end(), 0);
 
-  std::array<size_t, SpatialDim> x_dir{{1, 0, 0}};
-  std::array<size_t, SpatialDim> y_dir{{0, 1, 0}};
+  std::array<size_t, SpatialDim> x_dir{};
+  x_dir[0] = 1;
+
+  std::array<size_t, SpatialDim> y_dir{};
+  y_dir[1] = 1;
+
   std::array<size_t, SpatialDim> z_dir{{0, 0, 1}};
 
   if (connection_dir == x_dir) {
+    std::vector<std::array<double, SpatialDim>>& element_face =
+        get_element_face(element_gridpoints_BLCs, 0, true);
+    std::vector<std::array<double, SpatialDim>>& neighbour_face =
+        get_element_face(neighbour_element_gridpoints_BLCs, 0, false);
+
+    std::vector<size_t> element_gridpoints_labels =
+        convert_BLC_to_gridpoint_label(element_face);
+    std::vector<size_t> neighbour_gridpoints_labels =
+        convert_BLC_to_gridpoint_label(neighbour_face);
+
+    // NO SUBCELL OR AMR
+
     connection_indices.erase(
         connection_indices.end() - element_dim_offsets.second,
         connection_indices.end());
+    connection_indices = std::erase_if(
+        connection_indices, [element_max_offset_factor](size_t index) {
+          return (index + 1) % element_dim_offsets.second == 0
+        });
 
-    for (size_t y_index = 0; y_index < element_dim_offsets.second; y_index++) {
+    std::vector<size_t>& new_connectivity;
+
+    for (const auto& connection_index : connection_indices) {
+      new_connectivity.push_back(element_gridpoints_labels[connection_index]);
+      new_connectivity.push_back(neighbour_gridpoints_labels[connection_index]);
+      new_connectivity.push_back(
+          neighbour_gridpoints_labels[connection_index +
+                                      neighbour_element_dim_offsets.second]);
+      new_connectivity.push_back(
+          element_gridpoints_labels[connection_index +
+                                    element_dim_offsets.second]);
+
+      // 3D
+      new_connectivity.push_back(
+          element_gridpoints_labels[connection_index + 1]);
+      new_connectivity.push_back(
+          neighbour_gridpoints_labels[connection_index + 1]);
+      new_connectivity.push_back(
+          neighbour_gridpoints_labels[connection_index +
+                                      neighbour_element_dim_offsets.second +
+                                      1]);
+      new_connectivity.push_back(
+          element_gridpoints_labels[connection_index +
+                                    element_dim_offsets.second + 1]);
     }
+
+    return new_connectivity;
 
   } else if (connection_dir == y_dir) {
   } else if (connection_dir == z_dir) {
