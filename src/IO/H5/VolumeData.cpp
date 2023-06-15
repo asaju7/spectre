@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <hdf5.h>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -397,7 +398,8 @@ std::vector<double> sort_and_order(std::vector<double>& unsorted_coordinate) {
 
 template <size_t SpatialDim>
 std::pair<size_t, size_t> gridpoints_BLCs_dim_offsets(
-    std::vector<std::array<double, SpatialDim>> element_gridpoints_BLCs) {
+    const std::vector<std::array<double, SpatialDim>>&
+        element_gridpoints_BLCs) {
   int y_init = element_gridpoints_BLCs[0][1];
   int x_init = element_gridpoints_BLCs[0][0];
 
@@ -407,30 +409,100 @@ std::pair<size_t, size_t> gridpoints_BLCs_dim_offsets(
     return gridpoint_BLCs[index] == element_gridpoints_BLCs[0][index];
   };
 
-  size_t y_offset_index = alg::find_if_not(
-      element_gridpoints_BLCs.begin(), element_gridpoints_BLCs.end(),
-      std::bind(is_equal, std::placeholders::_1, 1));
-  size_t x_offset_index = alg::find_if_not(
-      element_gridpoints_BLCs.begin(), element_gridpoints_BLCs.end(),
-      std::bind(is_equal, std::placeholders::_1, 0));
+  size_t y_offset_index = std::distance(
+      element_gridpoints_BLCs.begin(),
+      alg::find_if_not(element_gridpoints_BLCs.begin(),
+                       element_gridpoints_BLCs.end(),
+                       std::bind(is_equal, std::placeholders::_1, 1)));
+  size_t x_offset_index = std::distance(
+      element_gridpoints_BLCs.begin(),
+      alg::find_if_not(element_gridpoints_BLCs.begin(),
+                       element_gridpoints_BLCs.end(),
+                       std::bind(is_equal, std::placeholders::_1, 0)));
 
   return std::make_pair(x_offset_index, y_offset_index);
 }
 
 template <size_t SpatialDim>
 std::vector<size_t> convert_BLC_to_gridpoint_label(
-    size_t block_num,
-    std::vector<std::array<double, SpatialDim>> element_gridpoints_BLCs,
-    std::unordered_map<
+    const size_t& block_num,
+    std::vector<std::array<double, SpatialDim>>& element_gridpoints_BLCs,
+    const std::unordered_map<
         std::pair<size_t, std::array<double, SpatialDim>>, size_t,
-        boost::hash<std::pair<size_t, std::array<double, SpatialDim>>>>
+        boost::hash<std::pair<size_t, std::array<double, SpatialDim>>>>&
         gridpoint_label_map) {
-  std::vector<size_t> element_gridpoints_labels;
+  std::vector<size_t> element_gridpoints_labels(element_gridpoints_BLCs.size());
   std::pair<size_t, std::array<double, SpatialDim>> key;
 
   for (const auto& gridpoint : element_gridpoints_BLCs) {
     key = {block_num, gridpoint};
     element_gridpoints_labels.push_back(gridpoint_label_map.at(key));
+  }
+
+  // Deallocates memory from old vector
+  std::vector<std::array<double, SpatialDim>>().swap(element_gridpoints_BLCs);
+
+  return element_gridpoints_labels;
+}
+
+template <size_t SpatialDim>
+std::vector<std::array<double, SpatialDim>> get_element_face(
+    std::vector<std::array<double, SpatialDim>>& element_gridpoints_BLCs,
+    size_t index) {
+  const double& max_value = element_gridpoints_BLCs.back()[index];
+
+  std::vector<std::array<double, SpatialDim>> element_face =
+      std::erase_if(element_gridpoints_BLCs,
+                    [max_value](std::array<double, SpatialDim> gridpoint_BLCs) {
+                      return gridpoint_BLCs[index] != max_value;
+                    });
+  return element_face;
+}
+
+template <size_t SpatialDim>
+std::vector<size_t> build_new_connectivity_by_hexahedron(
+    std::vector<std::array<double, SpatialDim>>& element_gridpoints_BLCs,
+    std::vector<std::array<double, SpatialDim>>
+        neighbour_element_gridpoints_BLCs,
+    std::array<size_t, SpatialDim> connection_dir) {
+  const size_t& num_of_gridpoints = element_gridpoints_BLCs.size();
+
+  const std::pair<size_t, size_t>& element_dim_offsets =
+      gridpoints_BLCs_dim_offsets(element_gridpoints_BLCs);
+  const std::pair<size_t, size_t>& neighbour_element_dim_offsets =
+      gridpoints_BLCs_dim_offsets(neighbour_element_gridpoints_BLCs);
+
+  std::pair<size_t, size_t> element_max_offset_factor =
+      std::make_pair<num_of_gridpoints / element_dim_offsets.first,
+                     (element_dim_offsets.first - 1) /
+                         element_dim_offsets.second>;
+  std::pair<size_t, size_t> neighbour_element_max_offset_factor =
+      std::make_pair<num_of_gridpoints / neighbour_element_dim_offsets.first,
+                     (neighbour_element_dim_offsets.first - 1) /
+                         neighbour_element_dim_offsets.second>;
+
+  std::vector<size_t> element_gridpoints_labels =
+      convert_BLC_to_gridpoint_label(element_gridpoints_BLCs);
+  std::vector<size_t> neighbour_element_gridpoints_labels =
+      convert_BLC_to_gridpoint_label(neighbour_element_gridpoints_BLCs);
+
+  std::vector<size_t> connection_indices(num_of_gridpoints);
+  std::iota(connection_indices.begin(), connection_indices.end(), 0);
+
+  std::array<size_t, SpatialDim> x_dir{{1, 0, 0}};
+  std::array<size_t, SpatialDim> y_dir{{0, 1, 0}};
+  std::array<size_t, SpatialDim> z_dir{{0, 0, 1}};
+
+  if (connection_dir == x_dir) {
+    connection_indices.erase(
+        connection_indices.end() - element_dim_offsets.second,
+        connection_indices.end());
+
+    for (size_t y_index = 0; y_index < element_dim_offsets.second; y_index++) {
+    }
+
+  } else if (connection_dir == y_dir) {
+  } else if (connection_dir == z_dir) {
   }
 
   return element_gridpoints_labels;
@@ -751,6 +823,9 @@ void VolumeData::write_volume_data(
   if (serialized_functions_of_time.has_value()) {
     h5::write_data(observation_group.id(), *serialized_functions_of_time,
                    {serialized_functions_of_time->size()}, "functions_of_time");
+
+    // std::cout << "Obs Id: " << observation_id << '\n';
+    std::cout << "Gridnames: " << grid_names << '\n';
   }
 }
 
