@@ -453,15 +453,16 @@ std::vector<std::array<double, SpatialDim>> get_element_face(
                                       ? element_gridpoints_BLCs.back()[index]
                                       : element_gridpoints_BLCs.front()[index];
 
-  std::vector<std::array<double, SpatialDim>> element_face = std::erase_if(
-      element_gridpoints_BLCs,
-      [threshold_value](std::array<double, SpatialDim> gridpoint_BLCs) {
-        return gridpoint_BLCs[index] != threshold_value;
-      });
+  std::vector<std::array<double, SpatialDim>> element_face =
+      element_gridpoints_BLCs.erase(
+          alg::remove_if(element_gridpoints_BLCs,
+                         [threshold_value, index](
+                             std::array<double, SpatialDim> gridpoint_BLCs) {
+                           return gridpoint_BLCs[index] != threshold_value;
+                         }),
+          element_gridpoints_BLCs.end());
   return element_face;
 }
-
-template <size_t SpatialDim>
 
 template <size_t SpatialDim>
 std::vector<size_t> build_new_connectivity_by_hexahedron(
@@ -486,10 +487,10 @@ std::vector<size_t> build_new_connectivity_by_hexahedron(
                      (neighbour_element_dim_offsets.first - 1) /
                          neighbour_element_dim_offsets.second>;
 
-  std::vector<size_t> element_gridpoints_labels =
-      convert_BLC_to_gridpoint_label(element_gridpoints_BLCs);
-  std::vector<size_t> neighbour_element_gridpoints_labels =
-      convert_BLC_to_gridpoint_label(neighbour_element_gridpoints_BLCs);
+  // std::vector<size_t> element_gridpoints_labels =
+  //     convert_BLC_to_gridpoint_label(element_gridpoints_BLCs);
+  // std::vector<size_t> neighbour_element_gridpoints_labels =
+  //     convert_BLC_to_gridpoint_label(neighbour_element_gridpoints_BLCs);
 
   std::vector<size_t> connection_indices(num_of_gridpoints);
   std::iota(connection_indices.begin(), connection_indices.end(), 0);
@@ -518,10 +519,12 @@ std::vector<size_t> build_new_connectivity_by_hexahedron(
     connection_indices.erase(
         connection_indices.end() - element_dim_offsets.second,
         connection_indices.end());
-    connection_indices = std::erase_if(
-        connection_indices, [element_max_offset_factor](size_t index) {
-          return (index + 1) % element_dim_offsets.second == 0
-        });
+    connection_indices = connection_indices.erase(
+        alg::remove_if(connection_indices,
+                       [element_dim_offsets](size_t index) {
+                         return (index + 1) % element_dim_offsets.second == 0;
+                       }),
+        connection_indices.end());
 
     std::vector<size_t>& new_connectivity;
 
@@ -555,7 +558,7 @@ std::vector<size_t> build_new_connectivity_by_hexahedron(
   } else if (connection_dir == z_dir) {
   }
 
-  return element_gridpoints_labels;
+  // return element_gridpoints_labels;
 }
 
 // Builds the connectivity by cube
