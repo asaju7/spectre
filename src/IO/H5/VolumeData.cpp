@@ -396,19 +396,24 @@ std::vector<double> sort_and_order(std::vector<double>& unsorted_coordinate) {
 
 // Neighbour direction: +/- 1,2,3 for x,y,z
 
+// Need offsets to determine how to index element for gridpoints
 template <size_t SpatialDim>
 std::pair<size_t, size_t> gridpoints_BLCs_dim_offsets(
     const std::vector<std::array<double, SpatialDim>>&
         element_gridpoints_BLCs) {
+  // Get initial y,x coordinates
   int y_init = element_gridpoints_BLCs[0][1];
   int x_init = element_gridpoints_BLCs[0][0];
 
+  // Comparison function to check if BLC at index dimension is equal
   auto is_equal = [element_gridpoints_BLCs](
                       std::array<double, SpatialDim> gridpoint_BLCs,
                       size_t index) {
     return gridpoint_BLCs[index] == element_gridpoints_BLCs[0][index];
   };
 
+  // Find first value at which is_equal is not true in both dimensions
+  // Add check that iterator did not return last, i.e. couldn't determine offset
   size_t y_offset_index = std::distance(
       element_gridpoints_BLCs.begin(),
       alg::find_if_not(element_gridpoints_BLCs.begin(),
@@ -431,9 +436,11 @@ std::vector<size_t> convert_BLC_to_gridpoint_label(
         std::pair<size_t, std::array<double, SpatialDim>>, size_t,
         boost::hash<std::pair<size_t, std::array<double, SpatialDim>>>>&
         gridpoint_label_map) {
+  // Declare and reserve vector of labels
   std::vector<size_t> element_gridpoints_labels(element_gridpoints_BLCs.size());
   std::pair<size_t, std::array<double, SpatialDim>> key;
 
+  // Use map to get value from key
   for (const auto& gridpoint : element_gridpoints_BLCs) {
     key = {block_num, gridpoint};
     element_gridpoints_labels.push_back(gridpoint_label_map.at(key));
@@ -445,14 +452,21 @@ std::vector<size_t> convert_BLC_to_gridpoint_label(
   return element_gridpoints_labels;
 }
 
+// positive_normal checks whether we want the face in positive or negative
+// direction, index specifies which SpatialDim dimension is fixed as a
+// coordinate
 template <size_t SpatialDim>
 std::vector<std::array<double, SpatialDim>> get_element_face(
     std::vector<std::array<double, SpatialDim>>& element_gridpoints_BLCs,
     size_t index, bool positive_normal) {
+  // Get min or max x, y, or z value depending on positive_normal being true or
+  // not
   const double& threshold_value = positive_normal
                                       ? element_gridpoints_BLCs.back()[index]
                                       : element_gridpoints_BLCs.front()[index];
 
+  // remove all gridpoints that don't match the threshold constant value, i.e.
+  // wrong slice
   std::vector<std::array<double, SpatialDim>> element_face =
       element_gridpoints_BLCs.erase(
           alg::remove_if(element_gridpoints_BLCs,
@@ -463,6 +477,9 @@ std::vector<std::array<double, SpatialDim>> get_element_face(
           element_gridpoints_BLCs.end());
   return element_face;
 }
+
+// Handle combining AMR-ed face neighbours into one set to handle together
+// myself
 
 template <size_t SpatialDim>
 std::vector<size_t> build_new_connectivity_by_hexahedron(
@@ -559,6 +576,79 @@ std::vector<size_t> build_new_connectivity_by_hexahedron(
   }
 
   // return element_gridpoints_labels;
+}
+
+template <typename T>
+std::vector<T> reduce_line_segment(std::vector<T> line_segment,
+                                   size_t reduced_num_of_points) {
+  // CHECK reduced > 1?
+
+  // current_num_of_points
+  size_t points_in_line = line_segment.size();
+
+  // base cases for recursion
+  if (points_in_line == reduced_num_of_points) {
+    return line_segment;
+  } else if (reduced_num_of_points == 2) {
+    return line_segment.erase(line_segment.begin() + 1, line_segment.end());
+  }
+
+  // Explain fully
+  size_t total_points_to_skip = points_in_line - reduced_num_of_points;
+  size_t number_to_skip = points_in_line / reduced_num_of_points;
+
+  // Slightly different erase based on how many points to skip
+  line_segment =
+      number_to_skip > 1
+          ? line_segment.erase(line_segment.begin() + 1,
+                               line_segment.begin() + number_to_skip + 1)
+          : line_segment.erase(line_segment.begin() + 1);
+
+  return reduce_line_segment(line_segment, reduced_num_of_points);
+}
+
+// 2D
+template <typename T>
+std::vector<T> connect_line_segments(
+    std::vector<T> line_one, std::vector<T> line_two,
+    std::array<int, SpatialDim> connection_dir) {
+  // Get both sizes
+  size_t line_one_size = line_one.size();
+  size_t line_two_size = line_two.size();
+
+  // Reduce to min of the sizes
+  line_one =
+      reduce_line_segment(line_one, std::min(line_one_size, line_two_size));
+  line_two =
+      reduce_line_segment(line_two, std::min(line_one_size, line_two_size));
+
+  // 2D
+  std::array<int, SpatialDim> x_dir{{1, 0}};
+  std::array<int, SpatialDim> y_dir{{0, 1}};
+
+  // 2D
+  std::vector<T> connectivity(4);
+
+  if (connection_dir == x_dir) {
+    // loop over all points except last point in line since no points after that
+    // for 'i+1'
+    for (size_t i = 0; i < line_one.size() - 1, ++i) {
+      connectivity.push_back(line_one[i]);
+      connectivity.push_back(line_two[i]);
+      connectivity.push_back(line_two[i + 1]);
+      connectivity.push_back(line_one[i + 1]);
+    }
+  } else if (connection_dir == y_dir) {
+    for (size_t i = 0; i < line_one.size() - 1, ++i) {
+      connectivity.push_back(line_one[i]);
+      connectivity.push_back(line_one[i + 1]);
+      connectivity.push_back(line_two[i + 1]);
+      connectivity.push_back(line_two[i]);
+    }
+  }
+  // Else ERROR?
+
+  return connectivity;
 }
 
 // Builds the connectivity by cube

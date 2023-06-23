@@ -439,6 +439,9 @@ void test_extend_connectivity_data() {
                        bases[i], quadratures[i]};
   }  // End of sample volume data
 
+  // SHUFFLE ALL VECTORS TO TEST SORTING!!!!!!!!!!!!
+
+
   const std::string h5_file_name("Unit.IO.H5.VolumeData.h5");
   const uint32_t version_number = 4;
 
