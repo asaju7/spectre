@@ -441,6 +441,11 @@ void test_extend_connectivity_data() {
 
   // SHUFFLE ALL VECTORS TO TEST SORTING!!!!!!!!!!!!
 
+  // Test overlapping L shape of elements in 3D for neighbours
+  // [ ]       ]
+  // [ ]
+  // [ ]
+  // [ ]
 
   const std::string h5_file_name("Unit.IO.H5.VolumeData.h5");
   const uint32_t version_number = 4;

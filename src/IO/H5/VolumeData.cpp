@@ -478,9 +478,6 @@ std::vector<std::array<double, SpatialDim>> get_element_face(
   return element_face;
 }
 
-// Handle combining AMR-ed face neighbours into one set to handle together
-// myself
-
 template <size_t SpatialDim>
 std::vector<size_t> build_new_connectivity_by_hexahedron(
     std::vector<std::array<double, SpatialDim>>& element_gridpoints_BLCs,
@@ -578,19 +575,22 @@ std::vector<size_t> build_new_connectivity_by_hexahedron(
   // return element_gridpoints_labels;
 }
 
-template <typename T>
-std::vector<T> reduce_line_segment(std::vector<T> line_segment,
-                                   size_t reduced_num_of_points) {
+std::vector<size_t> reduce_line_segment(std::vector<size_t>& connection_indices,
+                                        size_t reduced_num_of_points,
+                                        size_t iteration) {
   // CHECK reduced > 1?
 
   // current_num_of_points
-  size_t points_in_line = line_segment.size();
+  size_t points_in_line = connection_indices.size() - iteration;
 
   // base cases for recursion
   if (points_in_line == reduced_num_of_points) {
-    return line_segment;
+    return connection_indices;
+
   } else if (reduced_num_of_points == 2) {
-    return line_segment.erase(line_segment.begin() + 1, line_segment.end());
+    connection_indices.erase(connection_indices.begin() + iteration + 1,
+                             connection_indices.end() - 1);
+    return connection_indices;
   }
 
   // Explain fully
@@ -598,13 +598,14 @@ std::vector<T> reduce_line_segment(std::vector<T> line_segment,
   size_t number_to_skip = points_in_line / reduced_num_of_points;
 
   // Slightly different erase based on how many points to skip
-  line_segment =
-      number_to_skip > 1
-          ? line_segment.erase(line_segment.begin() + 1,
-                               line_segment.begin() + number_to_skip + 1)
-          : line_segment.erase(line_segment.begin() + 1);
+  number_to_skip > 1
+      ? connection_indices.erase(
+            connection_indices.begin() + iteration + 1,
+            connection_indices.begin() + iteration + number_to_skip + 1)
+      : connection_indices.erase(connection_indices.begin() + iteration + 1);
 
-  return reduce_line_segment(line_segment, reduced_num_of_points);
+  return reduce_line_segment(connection_indices, reduced_num_of_points - 1,
+                             iteration + 1);
 }
 
 // 2D
@@ -613,14 +614,18 @@ std::vector<T> connect_line_segments(
     std::vector<T> line_one, std::vector<T> line_two,
     std::array<int, SpatialDim> connection_dir) {
   // Get both sizes
-  size_t line_one_size = line_one.size();
-  size_t line_two_size = line_two.size();
+  size_t l1_size = line_one.size();
+  size_t l2_size = line_two.size();
+
+  // Create vector of indices to be reduced
+  std::vector<size_t> l1_indices(l1_size);
+  std::iota(l1_indices.begin(), l1_indices.end(), 0);
+  std::vector<size_t> l2_indices(l2_size);
+  std::iota(l2_indices.begin(), l2_indices.end(), 0);
 
   // Reduce to min of the sizes
-  line_one =
-      reduce_line_segment(line_one, std::min(line_one_size, line_two_size));
-  line_two =
-      reduce_line_segment(line_two, std::min(line_one_size, line_two_size));
+  l1_red_indices = reduce_line_segment(l1_indices, std::min(l1_size, l2_size));
+  l2_red_indices = reduce_line_segment(l2_indices, std::min(l1_size, l2_size));
 
   // 2D
   std::array<int, SpatialDim> x_dir{{1, 0}};
@@ -632,24 +637,31 @@ std::vector<T> connect_line_segments(
   if (connection_dir == x_dir) {
     // loop over all points except last point in line since no points after that
     // for 'i+1'
-    for (size_t i = 0; i < line_one.size() - 1, ++i) {
-      connectivity.push_back(line_one[i]);
-      connectivity.push_back(line_two[i]);
-      connectivity.push_back(line_two[i + 1]);
-      connectivity.push_back(line_one[i + 1]);
+    for (size_t i = 0; i < l1_red_indices.size() - 1, ++i) {
+      connectivity.push_back(line_one[l1_red_indices[i]]);
+      connectivity.push_back(line_two[l2_red_indices[i]]);
+      connectivity.push_back(line_two[l2_red_indices[i + 1]]);
+      connectivity.push_back(line_one[l1_red_indices[i + 1]]);
     }
   } else if (connection_dir == y_dir) {
-    for (size_t i = 0; i < line_one.size() - 1, ++i) {
-      connectivity.push_back(line_one[i]);
-      connectivity.push_back(line_one[i + 1]);
-      connectivity.push_back(line_two[i + 1]);
-      connectivity.push_back(line_two[i]);
+    for (size_t i = 0; i < l1_red_indices.size() - 1, ++i) {
+      connectivity.push_back(line_one[l1_red_indices[i]]);
+      connectivity.push_back(line_one[l1_red_indices[i + 1]]);
+      connectivity.push_back(line_two[l2_red_indices[i + 1]]);
+      connectivity.push_back(line_two[l2_red_indices[i]]);
     }
   }
   // Else ERROR?
 
   return connectivity;
 }
+
+// Handle combining AMR-ed face neighbours into one set to handle together
+// myself
+
+template <typename T>
+std::vector<T> connect_faces(std::vector<T> face_one, std::vector<T> face_two,
+                             std::array<int, SpatialDim> connection_dir) {}
 
 // Builds the connectivity by cube
 template <size_t SpatialDim>
