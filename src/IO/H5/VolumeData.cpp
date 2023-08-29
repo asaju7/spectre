@@ -609,7 +609,7 @@ std::vector<size_t> reduce_line_segment(std::vector<size_t>& connection_indices,
 }
 
 // 2D
-template <typename T>
+template <typename T, size_t SpatialDim>
 std::vector<T> connect_line_segments(
     std::vector<T> line_one, std::vector<T> line_two,
     std::array<int, SpatialDim> connection_dir) {
@@ -624,15 +624,17 @@ std::vector<T> connect_line_segments(
   std::iota(l2_indices.begin(), l2_indices.end(), 0);
 
   // Reduce to min of the sizes
-  l1_red_indices = reduce_line_segment(l1_indices, std::min(l1_size, l2_size));
-  l2_red_indices = reduce_line_segment(l2_indices, std::min(l1_size, l2_size));
+  l1_red_indices =
+      reduce_line_segment(l1_indices, std::min(l1_size, l2_size), 0);
+  l2_red_indices =
+      reduce_line_segment(l2_indices, std::min(l1_size, l2_size), 0);
 
   // 2D
   std::array<int, SpatialDim> x_dir{{1, 0}};
   std::array<int, SpatialDim> y_dir{{0, 1}};
 
   // 2D
-  std::vector<T> connectivity(4);
+  std::vector<T> connectivity;
 
   if (connection_dir == x_dir) {
     // loop over all points except last point in line since no points after that
@@ -652,16 +654,189 @@ std::vector<T> connect_line_segments(
     }
   }
   // Else ERROR?
-
   return connectivity;
 }
 
 // Handle combining AMR-ed face neighbours into one set to handle together
 // myself
 
-template <typename T>
-std::vector<T> connect_faces(std::vector<T> face_one, std::vector<T> face_two,
-                             std::array<int, SpatialDim> connection_dir) {}
+// face_properties stores the number of rows and columns respectively
+std::vector<size_t> reduce_face(
+    std::pair<size_t, size_t> face_properties,
+    std::pair<size_t, size_t> reduced_face_properties) {
+  std::vector<size_t> connectivity_indices;
+  connectivity_indices.reserve(reduced_face_properties.first *
+                               reduced_face_properties.second);
+
+  if (face_properties == reduced_face_properties) {
+    connectivity_indices.resize(reduced_face_properties.first *
+                                reduced_face_properties.second);
+    std::iota(connectivity_indices.begin(), connectivity_indices.end(), 0);
+    return connectivity_indices;
+  }
+
+  std::vector<size_t> reduced_row_indices;
+  reduced_row_indices.reserve(reduced_face_properties.first *
+                              face_properties.second);
+  // Going up columns one column at a time
+  for (size_t i = 0; i < face_properties.second; ++i) {
+    std::vector<size_t> column_indices(face_properties.first);
+    std::iota(column_indices.begin(), column_indices.end(), 0);
+    column_indices =
+        reduce_line_segment(column_indices, reduced_face_properties.first, 0);
+    for (size_t& index : column_indices) {
+      index = i * face_properties.first + index;
+    }
+    reduced_row_indices.insert(reduced_row_indices.end(),
+                               column_indices.begin(), column_indices.end());
+  }
+
+  std::vector<size_t> reduced_column_indices;
+  reduced_column_indices.reserve(reduced_face_properties.first *
+                                 reduced_face_properties.second);
+  // Going across rows one row at a time
+  for (size_t i = 0; i < reduced_face_properties.first; ++i) {
+    std::vector<size_t> row_indices(face_properties.second);
+    std::iota(row_indices.begin(), row_indices.end(), 0);
+    row_indices =
+        reduce_line_segment(row_indices, reduced_face_properties.second, 0);
+    for (size_t& index : row_indices) {
+      index = index * reduced_face_properties.first + i;
+    }
+    reduced_column_indices.insert(reduced_column_indices.end(),
+                                  row_indices.begin(), row_indices.end());
+  }
+
+  std::sort(reduced_column_indices.begin(), reduced_column_indices.end());
+
+  for (size_t index : reduced_column_indices) {
+    connectivity_indices.push_back(reduced_row_indices[index]);
+  }
+
+  return connectivity_indices;
+}
+
+// first is data, second is offset value (i.e. flattened 2d vector -> offset for
+// moving in 2nd dim)
+template <typename T, size_t SpatialDim>
+std::vector<T> connect_faces(std::pair<std::vector<T>, size_t> > face_one,
+                             std::pair<std::vector<T>, size_t> > face_two,
+                             std::array<int, SpatialDim> connection_dir) {
+  // number of columns (offset value is number of rows i.e. how many in a
+  // column)
+  size_t f1_max_offset = face_one.first.size() / face_one.second;
+  size_t f2_max_offset = face_two.first.size() / face_two.second;
+
+  // required number of columns and rows
+  size_t min_columns = std::min(f1_max_offset, f2_max_offset);
+  size_t min_rows = std::min(face_one.second, face_two.second);
+
+  f1_connectivity_indices =
+      reduce_face({face_one.second, f1_max_offset}, {min_rows, min_columns});
+  f2_connectivity_indices =
+      reduce_face({face_two.second, f2_max_offset}, {min_rows, min_columns});
+
+  // 3D
+  std::array<int, SpatialDim> x_dir{{1, 0, 0}};
+  std::array<int, SpatialDim> y_dir{{0, 1, 0}};
+  std::array<int, SpatialDim> z_dir{{0, 0, 1}};
+
+  // 3D
+  std::vector<T> connectivity(8);
+
+  for (size_t i = 0; i < min_columns - 1; ++i) {
+    for (size_t j = 0; j < min_rows - 1; ++j) {
+      size_t current_point = i * min_rows + j;
+
+      if (connection_dir == x_dir) {
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + 1]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + 1]]);
+        connectivity.push_back(
+            face_two
+                .first[f2_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_one
+                .first[f1_connectivity_indices[current_point + min_rows + 1]]);
+      } else if (connection_dir == y_dir) {
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + 1]]);
+        connectivity.push_back(
+            face_one
+                .first[f1_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_two
+                .first[f2_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + 1]]);
+      } else if (connection_dir == z_dir) {
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_one
+                .first[f1_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + 1]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_two
+                .first[f2_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + 1]]);
+      }
+    }
+  }
+
+  // // 2D
+  // std::array<int, SpatialDim> x_dir{{1, 0}};
+  // std::array<int, SpatialDim> y_dir{{0, 1}};
+
+  // // 2D
+  // std::vector<T> connectivity(4);
+
+  // if (connection_dir == x_dir) {
+  //   // loop over all points except last point in line since no points after
+  //   that
+  //   // for 'i+1'
+  //   for (size_t i = 0; i < l1_red_indices.size() - 1, ++i) {
+  //     connectivity.push_back(line_one[l1_red_indices[i]]);
+  //     connectivity.push_back(line_two[l2_red_indices[i]]);
+  //     connectivity.push_back(line_two[l2_red_indices[i + 1]]);
+  //     connectivity.push_back(line_one[l1_red_indices[i + 1]]);
+  //   }
+  // } else if (connection_dir == y_dir) {
+  //   for (size_t i = 0; i < l1_red_indices.size() - 1, ++i) {
+  //     connectivity.push_back(line_one[l1_red_indices[i]]);
+  //     connectivity.push_back(line_one[l1_red_indices[i + 1]]);
+  //     connectivity.push_back(line_two[l2_red_indices[i + 1]]);
+  //     connectivity.push_back(line_two[l2_red_indices[i]]);
+  //   }
+  // }
+  // // Else ERROR?
+  // return connectivity;
+}
 
 // Builds the connectivity by cube
 template <size_t SpatialDim>
