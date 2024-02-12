@@ -9,6 +9,7 @@
 #include <boost/iterator/transform_iterator.hpp>
 #include <cstddef>
 #include <hdf5.h>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -381,7 +382,7 @@ void VolumeData::extend_connectivity_data(
     auto bases = get_bases(obs_id);
     auto quadratures = get_quadratures(obs_id);
 
-    const std::vector<int>& new_connectivity =
+    const std::vector<int>& added_connectivity =
         h5::detail::extend_connectivity<SpatialDim>(grid_names, bases,
                                                     quadratures, extents);
 
@@ -390,8 +391,15 @@ void VolumeData::extend_connectivity_data(
     detail::OpenGroup observation_group(volume_data_group_.id(), path,
                                         AccessType::ReadWrite);
     const hid_t group_id = observation_group.id();
+    std::vector<int> connectivity =
+        read_data<1, std::vector<int>>(group_id, "connectivity");
+
+    for (const int& connection : added_connectivity) {
+      connectivity.push_back(connection);
+    }
+
     delete_connectivity(group_id);
-    write_connectivity(group_id, new_connectivity);
+    write_connectivity(group_id, connectivity);
   }
 }
 
@@ -781,7 +789,8 @@ Mesh<Dim> mesh_for_grid(
       const std::vector<std::vector<Spectral::Basis>>& all_bases,    \
       const std::vector<std::vector<Spectral::Quadrature>>& all_quadratures);
 
-GENERATE_INSTANTIATIONS(INSTANTIATE, (1, 2, 3))
+// GENERATE_INSTANTIATIONS(INSTANTIATE, (1, 2, 3))
+GENERATE_INSTANTIATIONS(INSTANTIATE, (3))
 
 #undef INSTANTIATE
 #undef DIM

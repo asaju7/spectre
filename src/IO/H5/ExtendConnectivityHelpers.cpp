@@ -6,14 +6,17 @@
 #include <algorithm>
 #include <array>
 #include <boost/functional/hash.hpp>
+#include <cmath>
 #include <cstddef>
 #include <hdf5.h>
+#include <iostream>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "DataStructures/Tensor/Tensor.hpp"
+#include "Domain/Structure/SegmentId.hpp"
 #include "IO/H5/VolumeData.hpp"
 #include "NumericalAlgorithms/Spectral/LogicalCoordinates.hpp"
 #include "NumericalAlgorithms/Spectral/Mesh.hpp"
@@ -166,6 +169,69 @@ compute_block_level_properties(
 // _____________________BEGIN DAVID'S STUFF____________________________________
 
 template <size_t SpatialDim>
+std::pair<std::array<size_t, SpatialDim>, std::array<size_t, SpatialDim>>
+compute_index_and_refinement_for_element(const std::string& element_grid_name) {
+  // Computes the refinements and indieces for an element
+  // when given the grid names for that particular element. This function CANNOT
+  // be given all the gridnames across the whole domain, only for the one
+  // element. Returns a std::pair where the first entry contains the all the
+  // indices for the element and the second entry contains the refinement in
+  // every dimension of the element.
+
+  std::array<size_t, SpatialDim> indices_of_element = {};
+  std::array<size_t, SpatialDim> h_ref_of_element = {};
+
+  // some string indexing gymnastics
+  size_t grid_points_previous_start_position = 0;
+  size_t grid_points_start_position = 0;
+  size_t grid_points_end_position = 0;
+
+  size_t h_ref_previous_start_position = 0;
+  size_t h_ref_start_position = 0;
+  size_t h_ref_end_position = 0;
+
+  for (size_t j = 0; j < SpatialDim; ++j) {
+    grid_points_start_position =
+        element_grid_name.find('I', grid_points_previous_start_position + 1);
+    if (j == SpatialDim - 1) {
+      grid_points_end_position =
+          element_grid_name.find(')', grid_points_start_position);
+    } else {
+      grid_points_end_position =
+          element_grid_name.find(',', grid_points_start_position);
+    }
+
+    std::stringstream element_index_substring(element_grid_name.substr(
+        grid_points_start_position + 1,
+        grid_points_end_position - grid_points_start_position - 1));
+    size_t current_element_index = 0;
+    element_index_substring >> current_element_index;
+    gsl::at(indices_of_element, j) = current_element_index;
+    grid_points_previous_start_position = grid_points_start_position;
+
+    h_ref_start_position =
+        element_grid_name.find('L', h_ref_previous_start_position + 1);
+    h_ref_end_position = element_grid_name.find('I', h_ref_start_position);
+    std::stringstream element_grid_name_substring(element_grid_name.substr(
+        h_ref_start_position + 1,
+        h_ref_end_position - h_ref_start_position - 1));
+    size_t current_element_h_ref = 0;
+    element_grid_name_substring >> current_element_h_ref;
+    gsl::at(h_ref_of_element, j) = current_element_h_ref;
+    h_ref_previous_start_position = h_ref_start_position;
+  }
+
+  // std::cout << indices_of_element[0] << indices_of_element[1]
+  //           << indices_of_element[2] << '\n';
+
+  // std::cout << h_ref_of_element[0] << h_ref_of_element[1]
+  //           << h_ref_of_element[2] << '\n';
+
+  // pushes back the all indices for an element to the "indices" vector.
+  return std::pair{indices_of_element, h_ref_of_element};
+}
+
+template <size_t SpatialDim>
 std::pair<std::vector<std::array<size_t, SpatialDim>>,
           std::vector<std::array<size_t, SpatialDim>>>
 compute_indices_and_refinements_for_elements(
@@ -180,51 +246,9 @@ compute_indices_and_refinements_for_elements(
   std::vector<std::array<size_t, SpatialDim>> indices = {};
   std::vector<std::array<size_t, SpatialDim>> h_ref = {};
 
-  // some string indexing gymnastics
-  size_t grid_points_previous_start_position = 0;
-  size_t grid_points_start_position = 0;
-  size_t grid_points_end_position = 0;
-
-  size_t h_ref_previous_start_position = 0;
-  size_t h_ref_start_position = 0;
-  size_t h_ref_end_position = 0;
-
   for (const auto& element_grid_name : block_grid_names) {
-    std::array<size_t, SpatialDim> indices_of_element = {};
-    grid_points_previous_start_position = 0;
-
-    std::array<size_t, SpatialDim> h_ref_of_element = {};
-    h_ref_previous_start_position = 0;
-    for (size_t j = 0; j < SpatialDim; ++j) {
-      grid_points_start_position =
-          element_grid_name.find('I', grid_points_previous_start_position + 1);
-      if (j == SpatialDim - 1) {
-        grid_points_end_position =
-            element_grid_name.find(')', grid_points_start_position);
-      } else {
-        grid_points_end_position =
-            element_grid_name.find(',', grid_points_start_position);
-      }
-
-      std::stringstream element_index_substring(element_grid_name.substr(
-          grid_points_start_position + 1,
-          grid_points_end_position - grid_points_start_position - 1));
-      size_t current_element_index = 0;
-      element_index_substring >> current_element_index;
-      gsl::at(indices_of_element, j) = current_element_index;
-      grid_points_previous_start_position = grid_points_start_position;
-
-      h_ref_start_position =
-          element_grid_name.find('L', h_ref_previous_start_position + 1);
-      h_ref_end_position = element_grid_name.find('I', h_ref_start_position);
-      std::stringstream element_grid_name_substring(element_grid_name.substr(
-          h_ref_start_position + 1,
-          h_ref_end_position - h_ref_start_position - 1));
-      size_t current_element_h_ref = 0;
-      element_grid_name_substring >> current_element_h_ref;
-      gsl::at(h_ref_of_element, j) = current_element_h_ref;
-      h_ref_previous_start_position = h_ref_start_position;
-    }
+    const auto& [index_of_elem, h_ref_of_elem] =
+        compute_index_and_refinement_for_element<SpatialDim>(element_grid_name);
 
     // std::cout << indices_of_element[0] << indices_of_element[1]
     //           << indices_of_element[2] << '\n';
@@ -233,8 +257,8 @@ compute_indices_and_refinements_for_elements(
     //           << h_ref_of_element[2] << '\n';
 
     // pushes back the all indices for an element to the "indices" vector.
-    indices.push_back(indices_of_element);
-    h_ref.push_back(h_ref_of_element);
+    indices.push_back(index_of_elem);
+    h_ref.push_back(h_ref_of_elem);
   }
 
   return std::pair{indices, h_ref};
@@ -421,11 +445,11 @@ compute_neighbors_with_direction(
 template <size_t SpatialDim>
 std::vector<std::array<double, SpatialDim>>
 block_logical_coordinates_for_element(
-    const std::vector<std::array<double, SpatialDim>>&
-        element_logical_coordinates,
+    std::vector<std::array<double, SpatialDim>>& element_logical_coordinates,
     const std::pair<std::array<size_t, SpatialDim>,
                     std::array<size_t, SpatialDim>>&
-        element_indices_and_refinements) {
+        element_indices_and_refinements,
+    bool sort_flag) {
   // Genreates the BLC of a particular element given that elements ELC and it's
   // indices and refinements as defined from its grid name.
 
@@ -448,11 +472,13 @@ block_logical_coordinates_for_element(
   }
 
   // sort the BLC by increasing z, then y, then x
-  std::sort(BLCs_for_element.begin(), BLCs_for_element.end(),
-            [](const auto& lhs, const auto& rhs) {
-              return std::lexicographical_compare(lhs.begin(), lhs.end(),
-                                                  rhs.begin(), rhs.end());
-            });
+  if (sort_flag) {
+    std::sort(BLCs_for_element.begin(), BLCs_for_element.end(),
+              [](const auto& lhs, const auto& rhs) {
+                return std::lexicographical_compare(lhs.begin(), lhs.end(),
+                                                    rhs.begin(), rhs.end());
+              });
+  }
 
   // print statements to test
   // for (size_t i = 0; i < BLCs_for_element.size(); ++i) {
@@ -485,7 +511,7 @@ std::string grid_name_reconstruction(
       element_grid_name += ")]";
     }
   }
-  std::cout << element_grid_name << '\n';
+  // std::cout << element_grid_name << '\n';
   return element_grid_name;
 }
 
@@ -513,24 +539,24 @@ std::vector<std::array<double, SpatialDim>> compute_element_BLCs(
 
   // Construct the mesh for the element of interest. mesh_for_grid finds the
   // index internally for us.
-  const Mesh<SpatialDim> element_mesh =
-      mesh_for_grid<SpatialDim>(element_grid_name, block_grid_names,
-                                block_extents, block_bases, block_quadratures);
+  const Mesh<SpatialDim> element_mesh = h5::mesh_for_grid<SpatialDim>(
+      element_grid_name, block_grid_names, block_extents, block_bases,
+      block_quadratures);
   // Compute the element logical coordinates for the element of interest
-  const std::vector<std::array<double, SpatialDim>> element_ELCs =
+  std::vector<std::array<double, SpatialDim>> element_ELCs =
       element_logical_coordinates<SpatialDim>(element_mesh);
   // Access the indices and refinements for the element of interest and change
   // container type. Was orginally a std::pair<std::vector<...>,
   // std::vector<...>>. We index into the vectors and reconstruct the pair.
   const std::pair<std::array<size_t, SpatialDim>,
-                  std::array<size_t, SpatialDim>>
+                  std::array<size_t, SpatialDim>>&
       element_indices_and_refinements{
           indices_and_refinements_for_elements.first[element_index],
           indices_and_refinements_for_elements.second[element_index]};
   // Compute BLC for the element of interest
-  const std::vector<std::array<double, SpatialDim>> element_BLCs =
+  const std::vector<std::array<double, SpatialDim>>& element_BLCs =
       block_logical_coordinates_for_element<SpatialDim>(
-          element_ELCs, element_indices_and_refinements);
+          element_ELCs, element_indices_and_refinements, true);
 
   return element_BLCs;
 }
@@ -559,7 +585,7 @@ compute_neighbor_BLCs_and_directions(
   // number of neighbor in each type.
   for (size_t k = 0; k < neighbors_with_direction.size(); ++k) {
     // Reconstruct the grid name for the neighboring element
-    std::cout << "Neighbor grid name: " << '\n';
+    // std::cout << "Neighbor grid name: " << '\n';
     // std::cout << "Neighbor BLCs: " << '\n';
     const std::vector<std::array<double, SpatialDim>> neighbor_BLCs =
         compute_element_BLCs(neighbors_with_direction[k].first,
@@ -571,9 +597,10 @@ compute_neighbor_BLCs_and_directions(
     // datastructure
     const std::array<int, SpatialDim> neighbor_direction =
         gsl::at(neighbors_with_direction, k).second;
-    std::cout << "direction vector: " << neighbors_with_direction[k].second[0]
-              << ", " << neighbors_with_direction[k].second[1] << ", "
-              << neighbors_with_direction[k].second[2] << '\n';
+    // std::cout << "direction vector: " <<
+    // neighbors_with_direction[k].second[0]
+    //           << ", " << neighbors_with_direction[k].second[1] << ", "
+    //           << neighbors_with_direction[k].second[2] << '\n';
 
     std::pair<std::vector<std::array<double, SpatialDim>>,
               std::array<int, SpatialDim>>
@@ -705,6 +732,546 @@ std::vector<double> order_sorted_elements(
   }
   return ordered_elements;
 }
+
+// ____________________________START ARYAN'S
+// STUFF_______________________________
+
+// David BLC of all gridpoints in element:
+
+/*std::vector<std::array<double, SpatialDim>> BLC_in_element(
+    std::array<SegmentId, SpatialDim> element,
+    std::vector<std::array<double, SpatialDim>> BLC);*/
+// Sorted in ascending z then y then x
+
+// Neighbour direction: +/- 1,2,3 for x,y,z
+
+// Need offsets to determine how to index element for gridpoints
+template <size_t SpatialDim>
+std::pair<size_t, size_t> gridpoints_BLCs_dim_offsets(
+    const std::vector<std::array<double, SpatialDim>>&
+        element_gridpoints_BLCs) {
+  // Get initial y,x coordinates
+  int y_init = element_gridpoints_BLCs[0][1];
+  int x_init = element_gridpoints_BLCs[0][0];
+
+  // Comparison function to check if BLC at index dimension is equal
+  auto is_equal = [element_gridpoints_BLCs](
+                      std::array<double, SpatialDim> gridpoint_BLCs,
+                      size_t index) {
+    return gridpoint_BLCs[index] == element_gridpoints_BLCs[0][index];
+  };
+
+  // Find first value at which is_equal is not true in both dimensions
+  // Add check that iterator did not return last, i.e. couldn't determine offset
+  size_t y_offset_index = std::distance(
+      element_gridpoints_BLCs.begin(),
+      std::find_if_not(element_gridpoints_BLCs.begin(),
+                       element_gridpoints_BLCs.end(),
+                       std::bind(is_equal, std::placeholders::_1, 1)));
+  size_t x_offset_index = std::distance(
+      element_gridpoints_BLCs.begin(),
+      std::find_if_not(element_gridpoints_BLCs.begin(),
+                       element_gridpoints_BLCs.end(),
+                       std::bind(is_equal, std::placeholders::_1, 0)));
+
+  return std::make_pair(x_offset_index, y_offset_index);
+}
+
+template <size_t SpatialDim>
+std::vector<size_t> convert_BLC_to_gridpoint_label(
+    const size_t& block_num,
+    std::vector<std::array<double, SpatialDim>>& element_gridpoints_BLCs,
+    const std::unordered_map<
+        std::pair<size_t, std::array<double, SpatialDim>>, size_t,
+        boost::hash<std::pair<size_t, std::array<double, SpatialDim>>>>&
+        gridpoint_label_map) {
+  // Declare and reserve vector of labels
+  std::vector<size_t> element_gridpoints_labels(element_gridpoints_BLCs.size());
+  std::pair<size_t, std::array<double, SpatialDim>> key;
+
+  // Use map to get value from key
+  for (const auto& gridpoint : element_gridpoints_BLCs) {
+    key = {block_num, gridpoint};
+    element_gridpoints_labels.push_back(gridpoint_label_map.at(key));
+  }
+
+  // Deallocates memory from old vector
+  std::vector<std::array<double, SpatialDim>>().swap(element_gridpoints_BLCs);
+
+  return element_gridpoints_labels;
+}
+
+// positive_normal checks whether we want the face in positive or negative
+// direction, index specifies which SpatialDim dimension is fixed as a
+// coordinate
+template <size_t SpatialDim>
+std::pair<std::vector<std::array<double, SpatialDim>>, size_t> get_element_face(
+    std::vector<std::array<double, SpatialDim>>& element_gridpoints_BLCs,
+    std::pair<size_t, size_t>& element_offsets, size_t index,
+    bool positive_normal) {
+  std::vector<std::array<double, SpatialDim>> element_face =
+      element_gridpoints_BLCs;
+
+  // Get min or max x, y, or z value depending on positive_normal being true or
+  // not
+  const double& threshold_value = positive_normal
+                                      ? element_gridpoints_BLCs.back()[index]
+                                      : element_gridpoints_BLCs.front()[index];
+
+  // remove all gridpoints that don't match the threshold constant value, i.e.
+  // wrong slice
+  element_face.erase(
+      std::remove_if(element_face.begin(), element_face.end(),
+                     [threshold_value,
+                      index](std::array<double, SpatialDim> gridpoint_BLCs) {
+                       return gridpoint_BLCs[index] != threshold_value;
+                     }),
+      element_face.end());
+
+  size_t offset = 0;
+
+  if (index == 2) {
+    offset = element_offsets.first / element_offsets.second;
+  } else {
+    offset = element_offsets.second;
+  }
+
+  return std::make_pair(element_face, offset);
+}
+
+template <size_t SpatialDim>
+std::vector<size_t> build_new_connectivity_by_hexahedron(
+    std::vector<std::array<double, SpatialDim>>& element_gridpoints_BLCs,
+    std::vector<std::array<double, SpatialDim>>
+        neighbour_element_gridpoints_BLCs,
+    std::array<size_t, SpatialDim> connection_dir) {
+  const size_t& num_of_gridpoints = element_gridpoints_BLCs.size();
+
+  //(x,y) offsets
+  const std::pair<size_t, size_t>& element_dim_offsets =
+      gridpoints_BLCs_dim_offsets(element_gridpoints_BLCs);
+  const std::pair<size_t, size_t>& neighbour_element_dim_offsets =
+      gridpoints_BLCs_dim_offsets(neighbour_element_gridpoints_BLCs);
+
+  std::pair<size_t, size_t> element_max_offset_factor =
+      std::make_pair<num_of_gridpoints / element_dim_offsets.first,
+                     (element_dim_offsets.first - 1) /
+                         element_dim_offsets.second>;
+  std::pair<size_t, size_t> neighbour_element_max_offset_factor =
+      std::make_pair<num_of_gridpoints / neighbour_element_dim_offsets.first,
+                     (neighbour_element_dim_offsets.first - 1) /
+                         neighbour_element_dim_offsets.second>;
+
+  // std::vector<size_t> element_gridpoints_labels =
+  //     convert_BLC_to_gridpoint_label(element_gridpoints_BLCs);
+  // std::vector<size_t> neighbour_element_gridpoints_labels =
+  //     convert_BLC_to_gridpoint_label(neighbour_element_gridpoints_BLCs);
+
+  std::vector<size_t> connection_indices(num_of_gridpoints);
+  std::iota(connection_indices.begin(), connection_indices.end(), 0);
+
+  std::array<size_t, SpatialDim> x_dir{};
+  x_dir[0] = 1;
+
+  std::array<size_t, SpatialDim> y_dir{};
+  y_dir[1] = 1;
+
+  std::array<size_t, SpatialDim> z_dir{{0, 0, 1}};
+
+  if (connection_dir == x_dir) {
+    std::vector<std::array<double, SpatialDim>>& element_face =
+        get_element_face(element_gridpoints_BLCs, 0, true);
+    std::vector<std::array<double, SpatialDim>>& neighbour_face =
+        get_element_face(neighbour_element_gridpoints_BLCs, 0, false);
+
+    std::vector<size_t> element_gridpoints_labels =
+        convert_BLC_to_gridpoint_label(element_face);
+    std::vector<size_t> neighbour_gridpoints_labels =
+        convert_BLC_to_gridpoint_label(neighbour_face);
+
+    // NO SUBCELL OR AMR
+
+    connection_indices.erase(
+        connection_indices.end() - element_dim_offsets.second,
+        connection_indices.end());
+    connection_indices = connection_indices.erase(
+        alg::remove_if(connection_indices,
+                       [element_dim_offsets](size_t index) {
+                         return (index + 1) % element_dim_offsets.second == 0;
+                       }),
+        connection_indices.end());
+
+    std::vector<size_t>& new_connectivity;
+
+    for (const auto& connection_index : connection_indices) {
+      new_connectivity.push_back(element_gridpoints_labels[connection_index]);
+      new_connectivity.push_back(neighbour_gridpoints_labels[connection_index]);
+      new_connectivity.push_back(
+          neighbour_gridpoints_labels[connection_index +
+                                      neighbour_element_dim_offsets.second]);
+      new_connectivity.push_back(
+          element_gridpoints_labels[connection_index +
+                                    element_dim_offsets.second]);
+
+      // 3D
+      new_connectivity.push_back(
+          element_gridpoints_labels[connection_index + 1]);
+      new_connectivity.push_back(
+          neighbour_gridpoints_labels[connection_index + 1]);
+      new_connectivity.push_back(
+          neighbour_gridpoints_labels[connection_index +
+                                      neighbour_element_dim_offsets.second +
+                                      1]);
+      new_connectivity.push_back(
+          element_gridpoints_labels[connection_index +
+                                    element_dim_offsets.second + 1]);
+    }
+
+    return new_connectivity;
+
+  } else if (connection_dir == y_dir) {
+  } else if (connection_dir == z_dir) {
+  }
+
+  // return element_gridpoints_labels;
+}
+
+std::vector<size_t> reduce_line_segment(std::vector<size_t>& connection_indices,
+                                        size_t reduced_num_of_points,
+                                        size_t iteration) {
+  // CHECK reduced > 1?
+
+  // current_num_of_points
+  size_t points_in_line = connection_indices.size() - iteration;
+
+  // base cases for recursion
+  if (points_in_line == reduced_num_of_points) {
+    return connection_indices;
+
+  } else if (reduced_num_of_points == 2) {
+    connection_indices.erase(connection_indices.begin() + iteration + 1,
+                             connection_indices.end() - 1);
+    return connection_indices;
+  }
+
+  // Explain fully
+  // size_t total_points_to_skip = points_in_line - reduced_num_of_points;
+  size_t number_to_skip = points_in_line / reduced_num_of_points;
+
+  // Slightly different erase based on how many points to skip
+  number_to_skip > 1
+      ? connection_indices.erase(
+            connection_indices.begin() + iteration + 1,
+            connection_indices.begin() + iteration + number_to_skip + 1)
+      : connection_indices.erase(connection_indices.begin() + iteration + 1);
+
+  return reduce_line_segment(connection_indices, reduced_num_of_points - 1,
+                             iteration + 1);
+}
+
+// 2D
+template <typename T, size_t SpatialDim>
+std::vector<T> connect_line_segments(
+    std::vector<T> line_one, std::vector<T> line_two,
+    std::array<int, SpatialDim> connection_dir) {
+  // Get both sizes
+  size_t l1_size = line_one.size();
+  size_t l2_size = line_two.size();
+
+  // Create vector of indices to be reduced
+  std::vector<size_t> l1_indices(l1_size);
+  std::iota(l1_indices.begin(), l1_indices.end(), 0);
+  std::vector<size_t> l2_indices(l2_size);
+  std::iota(l2_indices.begin(), l2_indices.end(), 0);
+
+  // Reduce to min of the sizes
+  std::vector<size_t>& l1_red_indices =
+      reduce_line_segment(l1_indices, std::min(l1_size, l2_size), 0);
+  std::vector<size_t>& l2_red_indices =
+      reduce_line_segment(l2_indices, std::min(l1_size, l2_size), 0);
+
+  // 2D
+  std::array<int, SpatialDim> x_dir{{1, 0}};
+  std::array<int, SpatialDim> y_dir{{0, 1}};
+
+  // 2D
+  std::vector<T> connectivity;
+
+  if (connection_dir == x_dir) {
+    // loop over all points except last point in line since no points after that
+    // for 'i+1'
+    for (size_t i = 0; i < l1_red_indices.size() - 1; ++i) {
+      connectivity.push_back(line_one[l1_red_indices[i]]);
+      connectivity.push_back(line_two[l2_red_indices[i]]);
+      connectivity.push_back(line_two[l2_red_indices[i + 1]]);
+      connectivity.push_back(line_one[l1_red_indices[i + 1]]);
+    }
+  } else if (connection_dir == y_dir) {
+    for (size_t i = 0; i < l1_red_indices.size() - 1; ++i) {
+      connectivity.push_back(line_one[l1_red_indices[i]]);
+      connectivity.push_back(line_one[l1_red_indices[i + 1]]);
+      connectivity.push_back(line_two[l2_red_indices[i + 1]]);
+      connectivity.push_back(line_two[l2_red_indices[i]]);
+    }
+  }
+  // Else ERROR?
+  return connectivity;
+}
+
+// Handle combining AMR-ed face neighbours into one set to handle together
+// myself
+
+// face_properties stores the number of rows and columns respectively
+std::vector<size_t> reduce_face(
+    std::pair<size_t, size_t> face_properties,
+    std::pair<size_t, size_t> reduced_face_properties) {
+  std::vector<size_t> connectivity_indices;
+  connectivity_indices.reserve(reduced_face_properties.first *
+                               reduced_face_properties.second);
+
+  if (face_properties == reduced_face_properties) {
+    connectivity_indices.resize(reduced_face_properties.first *
+                                reduced_face_properties.second);
+    std::iota(connectivity_indices.begin(), connectivity_indices.end(), 0);
+    return connectivity_indices;
+  }
+
+  std::vector<size_t> reduced_row_indices;
+  reduced_row_indices.reserve(reduced_face_properties.first *
+                              face_properties.second);
+  // Going up columns one column at a time
+  for (size_t i = 0; i < face_properties.second; ++i) {
+    std::vector<size_t> column_indices(face_properties.first);
+    std::iota(column_indices.begin(), column_indices.end(), 0);
+    column_indices =
+        reduce_line_segment(column_indices, reduced_face_properties.first, 0);
+    for (size_t& index : column_indices) {
+      index = i * face_properties.first + index;
+    }
+    reduced_row_indices.insert(reduced_row_indices.end(),
+                               column_indices.begin(), column_indices.end());
+  }
+
+  std::vector<size_t> reduced_column_indices;
+  reduced_column_indices.reserve(reduced_face_properties.first *
+                                 reduced_face_properties.second);
+  // Going across rows one row at a time
+  for (size_t i = 0; i < reduced_face_properties.first; ++i) {
+    std::vector<size_t> row_indices(face_properties.second);
+    std::iota(row_indices.begin(), row_indices.end(), 0);
+    row_indices =
+        reduce_line_segment(row_indices, reduced_face_properties.second, 0);
+    for (size_t& index : row_indices) {
+      index = index * reduced_face_properties.first + i;
+    }
+    reduced_column_indices.insert(reduced_column_indices.end(),
+                                  row_indices.begin(), row_indices.end());
+  }
+
+  std::sort(reduced_column_indices.begin(), reduced_column_indices.end());
+
+  for (size_t index : reduced_column_indices) {
+    connectivity_indices.push_back(reduced_row_indices[index]);
+  }
+
+  return connectivity_indices;
+}
+
+// first is data, second is offset value (i.e. flattened 2d vector -> offset for
+// moving in 2nd dim)
+template <typename T, size_t SpatialDim>
+std::vector<T> connect_faces(std::pair<std::vector<T>, size_t> face_one,
+                             std::pair<std::vector<T>, size_t> face_two,
+                             std::array<int, SpatialDim> connection_dir) {
+  // number of columns (offset value is number of rows i.e. how many in a
+  // column)
+  size_t f1_max_offset = face_one.first.size() / face_one.second;
+  size_t f2_max_offset = face_two.first.size() / face_two.second;
+
+  // required number of columns and rows
+  size_t min_columns = std::min(f1_max_offset, f2_max_offset);
+  size_t min_rows = std::min(face_one.second, face_two.second);
+
+  const std::vector<size_t>& f1_connectivity_indices =
+      reduce_face({face_one.second, f1_max_offset}, {min_rows, min_columns});
+  const std::vector<size_t>& f2_connectivity_indices =
+      reduce_face({face_two.second, f2_max_offset}, {min_rows, min_columns});
+
+  // 3D
+  std::array<int, SpatialDim> x_dir{{1, 0, 0}};
+  std::array<int, SpatialDim> y_dir{{0, 1, 0}};
+  std::array<int, SpatialDim> z_dir{{0, 0, 1}};
+  std::array<int, SpatialDim> x_dir_rev{{-1, 0, 0}};
+  std::array<int, SpatialDim> y_dir_rev{{0, -1, 0}};
+  std::array<int, SpatialDim> z_dir_rev{{0, 0, -1}};
+
+  // 3D
+  std::vector<T> connectivity(8);
+
+  for (size_t i = 0; i < min_columns - 1; ++i) {
+    for (size_t j = 0; j < min_rows - 1; ++j) {
+      size_t current_point = i * min_rows + j;
+
+      if (connection_dir == x_dir) {
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + 1]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + 1]]);
+        connectivity.push_back(
+            face_two
+                .first[f2_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_one
+                .first[f1_connectivity_indices[current_point + min_rows + 1]]);
+      } else if (connection_dir == y_dir) {
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + 1]]);
+        connectivity.push_back(
+            face_one
+                .first[f1_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_two
+                .first[f2_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + 1]]);
+      } else if (connection_dir == z_dir) {
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_one
+                .first[f1_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_one.first[f1_connectivity_indices[current_point + 1]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + min_rows]]);
+        connectivity.push_back(
+            face_two
+                .first[f2_connectivity_indices[current_point + min_rows + 1]]);
+        connectivity.push_back(
+            face_two.first[f2_connectivity_indices[current_point + 1]]);
+        // } else if (connection_dir == x_dir_rev) {
+        //   connectivity.push_back(
+        //       face_one.first[f2_connectivity_indices[current_point]]);
+        //   connectivity.push_back(
+        //       face_two.first[f1_connectivity_indices[current_point]]);
+        //   connectivity.push_back(
+        //       face_two.first[f1_connectivity_indices[current_point +
+        //       min_rows]]);
+        //   connectivity.push_back(
+        //       face_one.first[f2_connectivity_indices[current_point +
+        //       min_rows]]);
+        //   connectivity.push_back(
+        //       face_one.first[f2_connectivity_indices[current_point + 1]]);
+        //   connectivity.push_back(
+        //       face_two.first[f1_connectivity_indices[current_point + 1]]);
+        //   connectivity.push_back(
+        //       face_two
+        //           .first[f1_connectivity_indices[current_point + min_rows +
+        //           1]]);
+        //   connectivity.push_back(
+        //       face_one
+        //           .first[f2_connectivity_indices[current_point + min_rows +
+        //           1]]);
+        // } else if (connection_dir == y_dir_rev) {
+        //   connectivity.push_back(
+        //       face_one.first[f2_connectivity_indices[current_point]]);
+        //   connectivity.push_back(
+        //       face_one.first[f2_connectivity_indices[current_point +
+        //       min_rows]]);
+        //   connectivity.push_back(
+        //       face_two.first[f1_connectivity_indices[current_point +
+        //       min_rows]]);
+        //   connectivity.push_back(
+        //       face_two.first[f1_connectivity_indices[current_point]]);
+        //   connectivity.push_back(
+        //       face_one.first[f2_connectivity_indices[current_point + 1]]);
+        //   connectivity.push_back(
+        //       face_one
+        //           .first[f2_connectivity_indices[current_point + min_rows +
+        //           1]]);
+        //   connectivity.push_back(
+        //       face_two
+        //           .first[f1_connectivity_indices[current_point + min_rows +
+        //           1]]);
+        //   connectivity.push_back(
+        //       face_two.first[f1_connectivity_indices[current_point + 1]]);
+        // } else if (connection_dir == z_dir_rev) {
+        //   connectivity.push_back(
+        //       face_one.first[f2_connectivity_indices[current_point]]);
+        //   connectivity.push_back(
+        //       face_one.first[f2_connectivity_indices[current_point +
+        //       min_rows]]);
+        //   connectivity.push_back(
+        //       face_one
+        //           .first[f2_connectivity_indices[current_point + min_rows +
+        //           1]]);
+        //   connectivity.push_back(
+        //       face_one.first[f2_connectivity_indices[current_point + 1]]);
+        //   connectivity.push_back(
+        //       face_two.first[f1_connectivity_indices[current_point]]);
+        //   connectivity.push_back(
+        //       face_two.first[f1_connectivity_indices[current_point +
+        //       min_rows]]);
+        //   connectivity.push_back(
+        //       face_two
+        //           .first[f1_connectivity_indices[current_point + min_rows +
+        //           1]]);
+        //   connectivity.push_back(
+        //       face_two.first[f1_connectivity_indices[current_point + 1]]);
+      }
+    }
+  }
+
+  // // 2D
+  // std::array<int, SpatialDim> x_dir{{1, 0}};
+  // std::array<int, SpatialDim> y_dir{{0, 1}};
+
+  // // 2D
+  // std::vector<T> connectivity(4);
+
+  // if (connection_dir == x_dir) {
+  //   // loop over all points except last point in line since no points after
+  //   that
+  //   // for 'i+1'
+  //   for (size_t i = 0; i < l1_red_indices.size() - 1, ++i) {
+  //     connectivity.push_back(line_one[l1_red_indices[i]]);
+  //     connectivity.push_back(line_two[l2_red_indices[i]]);
+  //     connectivity.push_back(line_two[l2_red_indices[i + 1]]);
+  //     connectivity.push_back(line_one[l1_red_indices[i + 1]]);
+  //   }
+  // } else if (connection_dir == y_dir) {
+  //   for (size_t i = 0; i < l1_red_indices.size() - 1, ++i) {
+  //     connectivity.push_back(line_one[l1_red_indices[i]]);
+  //     connectivity.push_back(line_one[l1_red_indices[i + 1]]);
+  //     connectivity.push_back(line_two[l2_red_indices[i + 1]]);
+  //     connectivity.push_back(line_two[l2_red_indices[i]]);
+  //   }
+  // }
+  // // Else ERROR?
+  return connectivity;
+}
+
+// ____________________________END ARYAN'S STUFF_______________________________
 
 // Returns a std::vector of std::pair where each std::pair is
 // composed of a number for the block a given grid point resides inside of, as
@@ -931,17 +1498,17 @@ std::vector<size_t> find_secondary_neighbors(
 
 // Write new connectivity connections given a std::vector of observation ids
 template <size_t SpatialDim>
-std::vector<std::vector<std::pair<std::vector<std::array<double, SpatialDim>>,
-                                  std::array<int, SpatialDim>>>>
-extend_connectivity_by_block(
+std::vector<std::array<double, SpatialDim>> extend_connectivity_by_block(
     const std::vector<std::string>& block_grid_names,
     const std::vector<std::vector<size_t>>& block_extents,
     const std::vector<std::vector<Spectral::Basis>>& block_bases,
     const std::vector<std::vector<Spectral::Quadrature>>& block_quadratures) {
   // For testing purposes:
-  std::vector<std::vector<std::pair<std::vector<std::array<double, SpatialDim>>,
-                                    std::array<int, SpatialDim>>>>
-      all_neighbor_info = {};
+  // std::vector<std::vector<std::pair<std::vector<std::array<double,
+  // SpatialDim>>, std::array<int, SpatialDim>>>>
+  // all_neighbor_info = {};
+
+  std::vector<std::array<double, SpatialDim>> block_connectivity;
 
   // std::pair of the indices(first entry) and refinements (second entry) for
   // the entire block.
@@ -968,32 +1535,77 @@ extend_connectivity_by_block(
 
     // Need the grid name of the element of interest to reverse search it in the
     // vector of all grid names to get its position in that vector
-    std::cout << "Element of interest grid name: " << '\n';
+    // std::cout << "Element of interest grid name: " << '\n';
     // std::cout << "Element of interest BLCs: " << '\n';
-    const std::vector<std::array<double, SpatialDim>> element_of_interest_BLCs =
+    std::vector<std::array<double, SpatialDim>> element_of_interest_BLCs =
         compute_element_BLCs(element_of_interest, block_grid_names,
                              block_extents, block_bases, block_quadratures,
                              indices_and_refinements_for_elements);
 
+    std::pair<size_t, size_t> elem_of_int_dim_offsets =
+        gridpoints_BLCs_dim_offsets(element_of_interest_BLCs);
+
     // Stores all neighbor BLCs and directions in neighbor_info
-    const std::vector<std::pair<std::vector<std::array<double, SpatialDim>>,
-                                std::array<int, SpatialDim>>>
-        neighbor_info = compute_neighbor_info<SpatialDim>(
+    std::vector<std::pair<std::vector<std::array<double, SpatialDim>>,
+                          std::array<int, SpatialDim>>>
+        neighbour_info = compute_neighbor_info<SpatialDim>(
             element_of_interest, neighbor_segment_ids, block_grid_names,
             block_extents, block_bases, block_quadratures,
             indices_and_refinements_for_elements);
-    all_neighbor_info.push_back(neighbor_info);
+    // all_neighbor_info.push_back(neighbor_info);
 
-    for (size_t j = 0; j < neighbor_info.size(); ++j) {
-      // Gives the index within neighbor_info of the secodary neighbors in
-      // order of increasing z, y, x by element. Each element's BLCs are
-      // sorted in the same fashion. If statement filters out face neighbors.
-      std::vector<size_t> secondary_neighbors =
-          find_secondary_neighbors(neighbor_info[j].second, neighbor_info);
+    // for (size_t j = 0; j < neighbour_info.size(); ++j) {
+    //   // Gives the index within neighbor_info of the secodary neighbors in
+    //   // order of increasing z, y, x by element. Each element's BLCs are
+    //   // sorted in the same fashion. If statement filters out face neighbors.
+    //   std::vector<size_t> secondary_neighbors =
+    //       find_secondary_neighbors(neighbour_info[j].second, neighbour_info);
+    // }
+
+    for (auto& neighbour : neighbour_info) {
+      std::array<int, SpatialDim> dim = neighbour.second;
+
+      std::pair<size_t, size_t> neighbour_dim_offsets =
+          gridpoints_BLCs_dim_offsets(neighbour.first);
+
+      const size_t& total_dim = std::accumulate(
+          dim.begin(), dim.end(), 0,
+          [](int x, int y) { return std::abs(x) + std::abs(y); });
+
+      if (total_dim < 1) {
+        ERROR("Neighbour has wrong total dimension");
+      } else if (total_dim == 1) {  // Face neighbour
+        // Getting face neighbour direction
+        size_t index = 0;
+
+        for (size_t j = 0; j < SpatialDim; j++) {
+          if (dim[j] != 0) {
+            index = j;
+          }
+        }
+
+        // dim[index] = 1 means neighbour is forward in that direction...want
+        // positive face for EoI, negative for neighbour
+        std::pair<std::vector<std::array<double, SpatialDim>>, size_t>
+            elem_of_int_face = get_element_face<SpatialDim>(
+                element_of_interest_BLCs, elem_of_int_dim_offsets, index,
+                (dim[index] == 1) ? true : false);
+        std::pair<std::vector<std::array<double, SpatialDim>>, size_t>
+            neighbour_face = get_element_face<SpatialDim>(
+                neighbour.first, neighbour_dim_offsets, index,
+                (dim[index] != 1) ? true : false);
+
+        std::vector<std::array<double, SpatialDim>> connectivity =
+            connect_faces(elem_of_int_face, neighbour_face, dim);
+
+        for (const auto& gridpoint : connectivity) {
+          block_connectivity.push_back(gridpoint);
+        }
+      }
     }
   }
 
-  return all_neighbor_info;
+  return block_connectivity;
 }
 
 // Write new connectivity connections given a std::vector of observation ids
@@ -1009,23 +1621,26 @@ std::vector<int> extend_connectivity(
   const auto sorted_grid_names =
       sort_by_block(sorted_element_indices, grid_names);
   const auto sorted_extents = sort_by_block(sorted_element_indices, extents);
+  const auto sorted_bases = sort_by_block(sorted_element_indices, bases);
+  const auto sorted_quadratures =
+      sort_by_block(sorted_element_indices, quadratures);
 
-  size_t total_expected_connectivity = 0;
-  std::vector<int> expected_grid_points_per_block;
-  expected_grid_points_per_block.reserve(number_of_blocks);
-  std::vector<std::array<int, SpatialDim>> h_ref_per_block;
-  h_ref_per_block.reserve(number_of_blocks);
+  // size_t total_expected_connectivity = 0;
+  // std::vector<int> expected_grid_points_per_block;
+  // expected_grid_points_per_block.reserve(number_of_blocks);
+  // std::vector<std::array<int, SpatialDim>> h_ref_per_block;
+  // h_ref_per_block.reserve(number_of_blocks);
 
   // Loop over blocks
-  for (size_t j = 0; j < number_of_blocks; ++j) {
-    auto [expected_connectivity_length, expected_number_of_grid_points,
-          h_ref_array] =
-        compute_block_level_properties<SpatialDim>(sorted_grid_names[j],
-                                                   sorted_extents[j]);
-    total_expected_connectivity += expected_connectivity_length;
-    expected_grid_points_per_block.push_back(expected_number_of_grid_points);
-    h_ref_per_block.push_back(h_ref_array);
-  }
+  // for (size_t j = 0; j < number_of_blocks; ++j) {
+  //   auto [expected_connectivity_length, expected_number_of_grid_points,
+  //         h_ref_array] =
+  //       compute_block_level_properties<SpatialDim>(sorted_grid_names[j],
+  //                                                  sorted_extents[j]);
+  //   total_expected_connectivity += expected_connectivity_length;
+  //   expected_grid_points_per_block.push_back(expected_number_of_grid_points);
+  //   h_ref_per_block.push_back(h_ref_array);
+  // }
 
   // Create an unordered_map to be used to associate a grid point's block
   // number and coordinates as an array to the its label
@@ -1041,16 +1656,16 @@ std::vector<int> extend_connectivity(
   // blocks. Each subvector is of length equal to the number of grid points
   // in the corresponding block, as we are storing an array of the block
   // logical coordinates for each grid point.
-  std::vector<std::vector<std::array<double, SpatialDim>>>
-      block_logical_coordinates_by_block;
-  block_logical_coordinates_by_block.reserve(number_of_blocks);
+  // std::vector<std::vector<std::array<double, SpatialDim>>>
+  //     block_logical_coordinates_by_block;
+  // block_logical_coordinates_by_block.reserve(number_of_blocks);
 
-  // Reserve size for the subvectors
-  for (const auto& sorted_block_index : sorted_element_indices) {
-    std::vector<std::array<double, SpatialDim>> sizing_vector;
-    sizing_vector.reserve(sorted_block_index.size());
-    block_logical_coordinates_by_block.push_back(sizing_vector);
-  }
+  // // Reserve size for the subvectors
+  // for (const auto& sorted_block_index : sorted_element_indices) {
+  //   std::vector<std::array<double, SpatialDim>> sizing_vector;
+  //   sizing_vector.reserve(sorted_block_index.size());
+  //   block_logical_coordinates_by_block.push_back(sizing_vector);
+  // }
 
   // Counter for the grid points when filling the unordered_map. Grid points
   // are labelled by positive integers, so we are numbering them with this
@@ -1078,10 +1693,14 @@ std::vector<int> extend_connectivity(
       element_logical_coordinates.push_back(logical_coords_element_increment);
     }
 
-    auto block_logical_coordinates =
-        generate_block_logical_coordinates<SpatialDim>(
-            element_logical_coordinates, grid_names[element_index],
-            h_ref_per_block[block_number_for_each_element[element_index]]);
+    const std::pair<std::array<size_t, SpatialDim>,
+                    std::array<size_t, SpatialDim>>& element_inds_and_refs =
+        compute_index_and_refinement_for_element<SpatialDim>(
+            grid_names[element_index]);
+
+    std::vector<std::array<double, SpatialDim>> block_logical_coordinates =
+        block_logical_coordinates_for_element<SpatialDim>(
+            element_logical_coordinates, element_inds_and_refs, false);
 
     // Stores (B#, grid_point_coord_array) -> grid_point_number in an
     // unordered_map and grid_point_coord_array by block
@@ -1094,22 +1713,24 @@ std::vector<int> extend_connectivity(
               block_and_grid_point, grid_point_number));
       grid_point_number += 1;
 
-      block_logical_coordinates_by_block
-          [block_number_for_each_element[element_index]]
-              .push_back(block_logical_coordinates[k]);
+      // block_logical_coordinates_by_block
+      //     [block_number_for_each_element[element_index]]
+      //         .push_back(block_logical_coordinates[k]);
     }
   }
 
   std::vector<int> new_connectivity;
-  new_connectivity.reserve(total_expected_connectivity);
+  // new_connectivity.reserve(total_expected_connectivity);
 
-  for (size_t j = 0; j < block_logical_coordinates_by_block.size(); ++j) {
-    auto block_number = j;
-    auto connectivity_of_keys = generate_new_connectivity<SpatialDim>(
-        block_logical_coordinates_by_block[j], block_number);
-    for (const std::pair<size_t, std::array<double, SpatialDim>>& it :
-         connectivity_of_keys) {
-      new_connectivity.push_back(block_and_grid_point_map[it]);
+  for (size_t j = 0; j < sorted_element_indices.size(); ++j) {
+    std::vector<std::array<double, SpatialDim>> block_connectivity =
+        extend_connectivity_by_block<SpatialDim>(
+            sorted_grid_names[j], sorted_extents[j], sorted_bases[j],
+            sorted_quadratures[j]);
+
+    for (const std::array<double, SpatialDim>& it : block_connectivity) {
+      new_connectivity.push_back(
+          block_and_grid_point_map[std::make_pair(j, it)]);
     }
   }
 
@@ -1125,7 +1746,8 @@ std::vector<int> extend_connectivity(
       std::vector<std::vector<Spectral::Quadrature>> & quadratures,     \
       std::vector<std::vector<size_t>> & extents);
 
-GENERATE_INSTANTIATIONS(INSTANTIATE, (1, 2, 3))
+// GENERATE_INSTANTIATIONS(INSTANTIATE, (1, 2, 3))
+GENERATE_INSTANTIATIONS(INSTANTIATE, (3))
 
 #undef INSTANTIATE
 #undef DIM

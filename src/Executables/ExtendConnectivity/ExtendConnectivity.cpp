@@ -33,10 +33,10 @@ void extend_connectivity(const std::string& file_name,
 
   switch (dim) {
     case 1:
-      volume_file.extend_connectivity_data<1>(observation_ids);
+      // volume_file.extend_connectivity_data<1>(observation_ids);
       break;
     case 2:
-      volume_file.extend_connectivity_data<2>(observation_ids);
+      // volume_file.extend_connectivity_data<2>(observation_ids);
       break;
     case 3:
       volume_file.extend_connectivity_data<3>(observation_ids);
