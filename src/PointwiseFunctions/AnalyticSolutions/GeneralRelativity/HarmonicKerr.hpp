@@ -69,125 +69,45 @@ namespace Solutions {
  * Eq. (43) in \cite Cook1997qc ), so the coordinates remain harmonic under
  * boosts.
  *
- * Consider a Schwarzschild black hole of mass \f$M\f$ and center \f$C^i\f$. The
- * spacetime will be specified using Cartesian coordinates \f$x^i\f$ that are
- * spatially and temporally harmonic. A radius centered on the black hole is
- *
- * \f{align}
- *     r &= \sqrt{\delta_{ij} \left(x^i - C^i\right)\left(x^j - C^j\right)}
- * \f}
- *
- * For computing the spatial metric, we define the following quantities:
- *
- * \f{align}
- *     \gamma_{rr} &= 1 + \frac{2M}{M+r} + \left(\frac{2M}{M+r}\right)^2
- *         + \left(\frac{2M}{M+r}\right)^3,\\
- *     \partial_r \gamma_{rr} &= -\frac{1}{2M}\left(\frac{2M}{M+r}\right)^2
- *         -\frac{1}{M}\left(\frac{2M}{M+r}\right)^3
- *         -\frac{3}{2M}\left(\frac{2M}{M+r}\right)^4,\\
- *     \frac{X^i}{r} &= \frac{x^i - C^i}{r},\\
- *     X_j &= X^i \delta_{ij}
- * \f}
- *
- * From these quantities, the spatial metric and its time derivative are
- * computed as
- *
- * \f{align}
- *     \gamma_{ij} &=
- *         \left(\gamma_{rr} - \left(1+\frac{M}{r}\right)^2\right)
- *             \frac{X_i}{r} \frac{X_j}{r} +
- *         \delta_{ij} \left(1+\frac{M}{r}\right)^2,\\
- *     \partial_t \gamma_{ij} &= 0
- * \f}
- *
- * The spatial derivative is given in terms of the following quantities:
- *
- * \f{align}
- *     f_0 &= \left(1+\frac{M}{r}\right)^2\\
- *     \partial_r f_0 &=
- *         2 \left(1+\frac{M}{r}\right)\left(-\frac{M}{r^2}\right),\\
- *     f_1 &= \frac{1}{r} \left(\gamma_{rr} - f_0\right),\\
- *     f_2 &= \partial_r \gamma_{rr} - \partial_r f_0 - 2 f_1
- * \f}
- *
- * In terms of these, the spatial metric's spatial derivative is
- *
- * \f{align}
- *     \partial_k \gamma_{ij} &=
- *         f_2 \frac{X_i}{r} \frac{X_j}{r} \frac{X_k}{r} +
- *         f_1 \frac{X_j}{r} \delta_{ik} + f_1 \frac{X_i}{r} \delta_{jk} +
- *         \partial_r f_0 \frac{X_k}{r} \delta_{ij}
- * \f}
- *
- * The lapse and its derivatives are
- *
- * \f{align}
- *     \alpha &= \gamma_{rr}^{-1/2},\\
- *     \partial_t \alpha &= 0,\\
- *     \partial_i \alpha &=
- *         -\frac{1}{2} \gamma_{rr}^{-3/2} \partial_r \gamma_{rr} \frac{X_i}{r}
- * \f}
- *
- * The shift and its time derivative are
- *
- * \f{align}
- *     \beta^i &= \left(\frac{2M}{M+r}\right)^2 \frac{X^i}{r}
- *         \frac{1}{\gamma_{rr}},\\
- *     \partial_t \beta^i &= 0
- * \f}
- *
- * The spatial derivative of the shift is computed in terms of the following
- * quantities:
- *
- * \f{align}
- *     f_3 &= \frac{1}{r} \frac{1}{\gamma_{rr}} \left(\frac{2M}{M+r}\right)^2,\\
- *     f_4 &=
- *         -f_3 -
- *         \frac{1}{M} \frac{1}{\gamma_{rr}}
- *             \left(\frac{2M}{M+r}\right)^3 -
- *         \partial_r \gamma_{rr} \left(\frac{2 M}{M+r}
- *             \frac{1}{\gamma_{rr}}\right)^2
- * \f}
- *
- * In terms of these, the shift's spatial derivative is
- *
- * \f{align}
- *     \partial_k \beta^i &= f_4 \frac{X^i}{r} \frac{X_k}{r} + \delta_k^i f_3
- * \f}
  */
-class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
-                              public MarkAsAnalyticSolution {
+class HarmonicKerr : public AnalyticSolution<3_st>,
+                     public MarkAsAnalyticSolution {
  public:
   struct Mass {
     using type = double;
     static constexpr Options::String help = {"Mass of the black hole"};
     static type lower_bound() { return 0.; }
   };
+  struct Spin {
+    using type = std::array<double, volume_dim>;
+    static constexpr Options::String help = {
+        "The [x,y,z] dimensionless spin of the black hole"};
+  };
   struct Center {
     using type = std::array<double, volume_dim>;
     static constexpr Options::String help = {
         "The [x,y,z] center of the black hole"};
   };
-  using options = tmpl::list<Mass, Center>;
+  using options = tmpl::list<Mass, Spin, Center>;
   static constexpr Options::String help{
-      "Schwarzschild black hole in Cartesian coordinates with harmonic gauge"};
+      "Kerr black hole in Cartesian coordinates with harmonic gauge"};
 
-  HarmonicSchwarzschild(double mass,
-                        const std::array<double, volume_dim>& center,
-                        const Options::Context& context = {});
+  HarmonicKerr(double mass,
+               const std::array<double, volume_dim>& dimensionless_spin,
+               const std::array<double, volume_dim>& center,
+               const Options::Context& context = {});
 
-  HarmonicSchwarzschild() = default;
-  HarmonicSchwarzschild(const HarmonicSchwarzschild& /*rhs*/) = default;
-  HarmonicSchwarzschild& operator=(const HarmonicSchwarzschild& /*rhs*/) =
-      default;
-  HarmonicSchwarzschild(HarmonicSchwarzschild&& /*rhs*/) = default;
-  HarmonicSchwarzschild& operator=(HarmonicSchwarzschild&& /*rhs*/) = default;
-  ~HarmonicSchwarzschild() = default;
+  HarmonicKerr() = default;
+  HarmonicKerr(const HarmonicKerr& /*rhs*/) = default;
+  HarmonicKerr& operator=(const HarmonicKerr& /*rhs*/) = default;
+  HarmonicKerr(HarmonicKerr&& /*rhs*/) = default;
+  HarmonicKerr& operator=(HarmonicKerr&& /*rhs*/) = default;
+  ~HarmonicKerr() = default;
 
-  explicit HarmonicSchwarzschild(CkMigrateMessage* /*msg*/);
+  explicit HarmonicKerr(CkMigrateMessage* /*msg*/);
 
   /*!
-   * \brief Computes and returns spacetime quantities for a Schwarzschild black
+   * \brief Computes and returns spacetime quantities for a Kerr black
    * hole with harmonic coordinates at a specific Cartesian position
    *
    * \param x Cartesian coordinates of the position at which to compute
@@ -215,6 +135,13 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
    */
   SPECTRE_ALWAYS_INLINE double mass() const { return mass_; }
   /*!
+   * \brief Return the spin of the black hole
+   */
+  SPECTRE_ALWAYS_INLINE const std::array<double, volume_dim>&
+  dimensionless_spin() const {
+    return dimensionless_spin_;
+  }
+  /*!
    * \brief Return the center of the black hole
    */
   SPECTRE_ALWAYS_INLINE const std::array<double, volume_dim>& center() const {
@@ -238,6 +165,28 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
     template <typename DataType, typename Frame = ::Frame::Inertial>
     using x_minus_center = ::Tags::TempI<0, 3, Frame, DataType>;
     /*!
+     * \brief Tag for the squared magnitude of dimensionless spin of the black
+     * hole
+     */
+    template <typename DataType>
+    using spin_sq = ::Tags::TempScalar<1, DataType>;
+    /*!
+     * \brief Tag for the magnitude of dimensionless spin of the black
+     * hole
+     */
+    template <typename DataType>
+    using spin_mag = ::Tags::TempScalar<2, DataType>;
+    /*!
+     * \brief Tag for the intermediate \f$\x^i x_i - a^2\f$
+     */
+    template <typename DataType>
+    using xc_sq_minus_a_sq = ::Tags::TempScalar<3, DataType>;
+    /*!
+     * \brief Tag for the intermediate \f$(r-M)^2\f$
+     */
+    template <typename DataType>
+    using r_minus_mass_sq = ::Tags::TempScalar<4, DataType>;
+    /*!
      * \brief Tag for the radius corresponding to the position of a point
      * relative to the center of the black hole
      *
@@ -245,7 +194,82 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * is defined by `internal_tags::x_minus_center`.
      */
     template <typename DataType>
-    using r = ::Tags::TempScalar<1, DataType>;
+    using r = ::Tags::TempScalar<5, DataType>;
+    /*!
+     * \brief Tag for the radius corresponding to the position of a point
+     * relative to the center of the black hole
+     *
+     * \details Defined as \f$r = \sqrt{\delta_{ij} X^i X^j}\f$, where \f$X^i\f$
+     * is defined by `internal_tags::x_minus_center`.
+     */
+    template <typename DataType>
+    using r_sq = ::Tags::TempScalar<6, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using theta = ::Tags::TempScalar<7, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using phi = ::Tags::TempScalar<8, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using rho_sq = ::Tags::TempScalar<9, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using inverse_rho_sq = ::Tags::TempScalar<10, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using r_plus_horizon = ::Tags::TempScalar<11, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using r_minus_horizon = ::Tags::TempScalar<12, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using capital_delta = ::Tags::TempScalar<13, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using r_plus_rplus_over_r_minus_rminus = ::Tags::TempScalar<14, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using two_mass_radius_over_rho_sq = ::Tags::TempScalar<15, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType>
+    using r_sq_plus_a_sq = ::Tags::TempScalar<16, DataType>;
+    /*!
+     * \brief Tag for the angle corresponding to the position of a point
+     * relative to the center of the black hole
+     */
+    template <typename DataType, typename Frame = ::Frame::Inertial>
+    using spatial_metric_harm_slicing = ::Tags::Tempii<17, 3, Frame, DataType>;
     /*!
      * \brief Tag for one over the radius corresponding to the position of a
      * point relative to the center of the black hole
@@ -254,7 +278,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::r`.
      */
     template <typename DataType>
-    using one_over_r = ::Tags::TempScalar<2, DataType>;
+    using one_over_r = ::Tags::TempScalar<18, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\frac{X^i}{r}\f$
      *
@@ -263,7 +287,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::r`.
      */
     template <typename DataType, typename Frame = ::Frame::Inertial>
-    using x_over_r = ::Tags::TempI<3, 3, Frame, DataType>;
+    using x_over_r = ::Tags::TempI<19, 3, Frame, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\frac{M}{r}\f$
      *
@@ -271,7 +295,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * is the radius defined by `internal_tags::r`.
      */
     template <typename DataType>
-    using m_over_r = ::Tags::TempScalar<4, DataType>;
+    using m_over_r = ::Tags::TempScalar<20, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\sqrt{f_0} = 1 + \frac{M}{r}\f$
      *
@@ -280,7 +304,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::f_0`.
      */
     template <typename DataType>
-    using sqrt_f_0 = ::Tags::TempScalar<5, DataType>;
+    using sqrt_f_0 = ::Tags::TempScalar<21, DataType>;
     /*!
      * \brief Tag for the intermediate
      * \f$f_0 = \left(1 + \frac{M}{r}\right)^2\f$
@@ -289,7 +313,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * is the radius defined by `internal_tags::r`.
      */
     template <typename DataType>
-    using f_0 = ::Tags::TempScalar<6, DataType>;
+    using f_0 = ::Tags::TempScalar<22, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\frac{2M}{M+r}\f$
      *
@@ -297,7 +321,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * is the radius defined by `internal_tags::r`.
      */
     template <typename DataType>
-    using two_m_over_m_plus_r = ::Tags::TempScalar<7, DataType>;
+    using two_m_over_m_plus_r = ::Tags::TempScalar<23, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\left(\frac{2M}{M+r}\right)^2\f$
      *
@@ -305,7 +329,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * is the radius defined by `internal_tags::r`.
      */
     template <typename DataType>
-    using two_m_over_m_plus_r_squared = ::Tags::TempScalar<8, DataType>;
+    using two_m_over_m_plus_r_squared = ::Tags::TempScalar<24, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\left(\frac{2M}{M+r}\right)^3\f$
      *
@@ -313,7 +337,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * is the radius defined by `internal_tags::r`.
      */
     template <typename DataType>
-    using two_m_over_m_plus_r_cubed = ::Tags::TempScalar<9, DataType>;
+    using two_m_over_m_plus_r_cubed = ::Tags::TempScalar<25, DataType>;
     /*!
      * \brief Tag for the \f$\gamma_{rr}\f$ component of the spatial metric
      *
@@ -328,7 +352,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * defined by `internal_tags::r`.
      */
     template <typename DataType>
-    using spatial_metric_rr = ::Tags::TempScalar<10, DataType>;
+    using spatial_metric_rr = ::Tags::TempScalar<26, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\frac{1}{\gamma_{rr}}\f$
      *
@@ -336,7 +360,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::spatial_metric_rr`.
      */
     template <typename DataType>
-    using one_over_spatial_metric_rr = ::Tags::TempScalar<11, DataType>;
+    using one_over_spatial_metric_rr = ::Tags::TempScalar<27, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\gamma_{rr} - f_0\f$
      *
@@ -345,7 +369,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::f_0`.
      */
     template <typename DataType>
-    using spatial_metric_rr_minus_f_0 = ::Tags::TempScalar<12, DataType>;
+    using spatial_metric_rr_minus_f_0 = ::Tags::TempScalar<28, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\partial_r \gamma_{rr}\f$
      *
@@ -361,7 +385,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * defined by `internal_tags::r`.
      */
     template <typename DataType>
-    using d_spatial_metric_rr = ::Tags::TempScalar<13, DataType>;
+    using d_spatial_metric_rr = ::Tags::TempScalar<29, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\partial_r f_0\f$
      *
@@ -376,7 +400,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * defined by `internal_tags::r`.
      */
     template <typename DataType>
-    using d_f_0 = ::Tags::TempScalar<14, DataType>;
+    using d_f_0 = ::Tags::TempScalar<30, DataType>;
     /*!
      * \brief Tag for the intermediate \f$\partial_r f_0 \frac{X_i}{r}\f$
      *
@@ -386,7 +410,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * is defined by `internal_tags::x_minus_center`.
      */
     template <typename DataType, typename Frame = ::Frame::Inertial>
-    using d_f_0_times_x_over_r = ::Tags::Tempi<15, 3, Frame, DataType>;
+    using d_f_0_times_x_over_r = ::Tags::Tempi<31, 3, Frame, DataType>;
     /*!
      * \brief Tag for the intermediate
      * \f$f_1 = \frac{1}{r} \left(\gamma_{rr} - f_0\right)\f$
@@ -397,7 +421,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::f_0`.
      */
     template <typename DataType>
-    using f_1 = ::Tags::TempScalar<16, DataType>;
+    using f_1 = ::Tags::TempScalar<32, DataType>;
     /*!
      * \brief Tag for the intermediate \f$f_1 \frac{X_i}{r}\f$
      *
@@ -407,7 +431,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::x_minus_center`.
      */
     template <typename DataType, typename Frame = ::Frame::Inertial>
-    using f_1_times_x_over_r = ::Tags::Tempi<17, 3, Frame, DataType>;
+    using f_1_times_x_over_r = ::Tags::Tempi<33, 3, Frame, DataType>;
     /*!
      * \brief Tag for the intermediate
      * \f$f_2 = \partial_r \gamma_{rr} - \partial_r f_0 - 2 f_1\f$
@@ -417,7 +441,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::d_f_0`, and \f$f_1\f$ is defined by `internal_tags::f_1`.
      */
     template <typename DataType>
-    using f_2 = ::Tags::TempScalar<18, DataType>;
+    using f_2 = ::Tags::TempScalar<34, DataType>;
     /*!
      * \brief Tag for the intermediate
      * \f$f_2 \frac{X_i}{r} \frac{X_j}{r} \frac{X_k}{r}\f$
@@ -428,7 +452,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::x_minus_center`.
      */
     template <typename DataType, typename Frame = ::Frame::Inertial>
-    using f_2_times_xxx_over_r_cubed = ::Tags::Tempiii<19, 3, Frame, DataType>;
+    using f_2_times_xxx_over_r_cubed = ::Tags::Tempiii<35, 3, Frame, DataType>;
     /*!
      * \brief Tag for the intermediate
      * \f$f_3 = \frac{1}{r}\frac{1}{\gamma_{rr}}\left(\frac{2M}{M+r}\right)^2\f$
@@ -438,7 +462,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * defined by `internal_tags::spatial_metric_rr`.
      */
     template <typename DataType>
-    using f_3 = ::Tags::TempScalar<20, DataType>;
+    using f_3 = ::Tags::TempScalar<36, DataType>;
     /*!
      * \brief Tag for the intermediate
      *
@@ -459,12 +483,12 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      * `internal_tags::d_spatial_metric_rr`.
      */
     template <typename DataType>
-    using f_4 = ::Tags::TempScalar<21, DataType>;
+    using f_4 = ::Tags::TempScalar<37, DataType>;
     /*!
      * \brief Tag for one over the determinant of the spatial metric
      */
     template <typename DataType>
-    using one_over_det_spatial_metric = ::Tags::TempScalar<22, DataType>;
+    using one_over_det_spatial_metric = ::Tags::TempScalar<38, DataType>;
     /*!
      * \brief Tag for the intermediate
      * \f$-\frac{1}{2} \gamma_{rr}^{-3/2} \partial_r \gamma_{rr}\f$
@@ -476,7 +500,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
      */
     template <typename DataType>
     using neg_half_lapse_cubed_times_d_spatial_metric_rr =
-        ::Tags::TempScalar<23, DataType>;
+        ::Tags::TempScalar<39, DataType>;
   };
 
   /*!
@@ -489,7 +513,20 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
   template <typename DataType, typename Frame = ::Frame::Inertial>
   using CachedBuffer = CachedTempBuffer<
       internal_tags::x_minus_center<DataType, Frame>,
-      internal_tags::r<DataType>, internal_tags::one_over_r<DataType>,
+      internal_tags::spin_sq<DataType>, internal_tags::spin_mag<DataType>,
+      internal_tags::xc_sq_minus_a_sq<DataType>,
+      internal_tags::r_minus_mass_sq<DataType>, internal_tags::r<DataType>,
+      internal_tags::r_sq<DataType>, internal_tags::theta<DataType>,
+      internal_tags::phi<DataType>, internal_tags::rho_sq<DataType>,
+      internal_tags::inverse_rho_sq<DataType>,
+      internal_tags::r_plus_horizon<DataType>,
+      internal_tags::r_minus_horizon<DataType>,
+      internal_tags::capital_delta<DataType>,
+      internal_tags::r_plus_rplus_over_r_minus_rminus<DataType>,
+      internal_tags::two_mass_radius_over_rho_sq<DataType>,
+      internal_tags::r_sq_plus_a_sq<DataType>,
+      internal_tags::spatial_metric_harm_slicing<DataType, Frame>,
+      internal_tags::one_over_r<DataType>,
       internal_tags::x_over_r<DataType, Frame>,
       internal_tags::m_over_r<DataType>, internal_tags::sqrt_f_0<DataType>,
       internal_tags::f_0<DataType>,
@@ -523,18 +560,18 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
   template <typename DataType, typename Frame = ::Frame::Inertial>
   class IntermediateComputer {
    public:
-    using CachedBuffer = HarmonicSchwarzschild::CachedBuffer<DataType, Frame>;
+    using CachedBuffer = HarmonicKerr::CachedBuffer<DataType, Frame>;
 
     /*!
      * \brief Constructs a computer for spacetime quantities of a given
-     * `gr::Solutions::HarmonicSchwarzschild` solution at at a specific
+     * `gr::Solutions::HarmonicKerr` solution at at a specific
      * Cartesian position
      *
-     * \param solution the given `gr::Solutions::HarmonicSchwarzschild` solution
+     * \param solution the given `gr::Solutions::HarmonicKerr` solution
      * \param x Cartesian coordinates of the position at which to compute
      * spacetime quantities
      */
-    IntermediateComputer(const HarmonicSchwarzschild& solution,
+    IntermediateComputer(const HarmonicKerr& solution,
                          const tnsr::I<DataType, 3, Frame>& x);
 
     /*!
@@ -547,11 +584,134 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
         internal_tags::x_minus_center<DataType, Frame> /*meta*/) const;
 
     /*!
+     * \brief Computes the intermediate defined by `internal_tags::spin_sq`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> spin_sq,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::spin_sq<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the intermediate defined by `internal_tags::spin_mag`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> spin_mag,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::spin_mag<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the intermediate defined by
+     * `internal_tags::xc_sq_minus_a_sq`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> xc_sq_minus_a_sq,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::xc_sq_minus_a_sq<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the intermediate defined by `internal_tags::r_minus_sq`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> r_minus_mass_sq,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::r_minus_mass_sq<DataType> /*meta*/) const;
+
+    /*!
      * \brief Computes the radius defined by `internal_tags::r`
      */
     void operator()(gsl::not_null<Scalar<DataType>*> r,
                     gsl::not_null<CachedBuffer*> cache,
                     internal_tags::r<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the intermediate defined by `internal_tags::r_sq`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> r_sq,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::r_sq<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the angle defined by `internal_tags::theta`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> theta,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::theta<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the angle defined by `internal_tags::phi`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> phi,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::phi<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the angle defined by `internal_tags::rho_sq`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> rho_sq,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::rho_sq<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the angle defined by `internal_tags::inverse_rho_sq`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> rho_sq,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::inverse_rho_sq<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the angle defined by `internal_tags::r_plus_horizon`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> r_plus_horizon,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::r_plus_horizon<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the angle defined by `internal_tags::r_minus_horizon`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> r_minus_horizon,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::r_minus_horizon<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the angle defined by `internal_tags::capital_delta`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> capital_delta,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::capital_delta<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the intermediate defined by
+     * `internal_tags::r_plus_rplus_over_r_minus_rminus`
+     */
+    void operator()(
+        gsl::not_null<Scalar<DataType>*> r_plus_rplus_over_r_minus_rminus,
+        gsl::not_null<CachedBuffer*> cache,
+        internal_tags::r_plus_rplus_over_r_minus_rminus<DataType> /*meta*/)
+        const;
+
+    /*!
+     * \brief Computes the intermediate defined by
+     * `internal_tags::two_mass_radius_over_rho_sq`
+     */
+    void operator()(
+        gsl::not_null<Scalar<DataType>*> two_mass_radius_over_rho_sq,
+        gsl::not_null<CachedBuffer*> cache,
+        internal_tags::two_mass_radius_over_rho_sq<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the intermediate defined by
+     * `internal_tags::r_sq_plus_a_sq`
+     */
+    void operator()(gsl::not_null<Scalar<DataType>*> r_sq_plus_a_sq,
+                    gsl::not_null<CachedBuffer*> cache,
+                    internal_tags::r_sq_plus_a_sq<DataType> /*meta*/) const;
+
+    /*!
+     * \brief Computes the angle defined by
+     * `internal_tags::spatial_metric_harm_slicing`
+     */
+    void operator()(
+        gsl::not_null<tnsr::ii<DataType, 3, Frame>*>
+            spatial_metric_harm_slicing,
+        gsl::not_null<CachedBuffer*> cache,
+        internal_tags::spatial_metric_harm_slicing<DataType, Frame> /*meta*/)
+        const;
 
     /*!
      * \brief Computes the intermediate defined by `internal_tags::one_over_r`
@@ -850,7 +1010,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
     /*!
      * \brief The harmonic Schwarzschild solution
      */
-    const HarmonicSchwarzschild& solution_;
+    const HarmonicKerr& solution_;
     /*!
      * \brief Cartesian coordinates of the position at which to compute
      * spacetime quantities
@@ -864,7 +1024,7 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
   template <typename DataType, typename Frame = ::Frame::Inertial>
   class IntermediateVars : public CachedBuffer<DataType, Frame> {
    public:
-    using CachedBuffer = HarmonicSchwarzschild::CachedBuffer<DataType, Frame>;
+    using CachedBuffer = HarmonicKerr::CachedBuffer<DataType, Frame>;
     using CachedBuffer::CachedBuffer;
     using CachedBuffer::get_var;
 
@@ -932,6 +1092,11 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
    */
   double mass_{std::numeric_limits<double>::signaling_NaN()};
   /*!
+   * \brief Dimensionless spin of the black hole
+   */
+  std::array<double, volume_dim> dimensionless_spin_ =
+      make_array<volume_dim>(std::numeric_limits<double>::signaling_NaN());
+  /*!
    * \brief Center of the black hole
    */
   std::array<double, volume_dim> center_ =
@@ -941,16 +1106,18 @@ class HarmonicSchwarzschild : public AnalyticSolution<3_st>,
 /*!
  * \brief Return whether two harmonic Schwarzschild solutions are equivalent
  */
-SPECTRE_ALWAYS_INLINE bool operator==(const HarmonicSchwarzschild& lhs,
-                                      const HarmonicSchwarzschild& rhs) {
-  return lhs.mass() == rhs.mass() and lhs.center() == rhs.center();
+SPECTRE_ALWAYS_INLINE bool operator==(const HarmonicKerr& lhs,
+                                      const HarmonicKerr& rhs) {
+  return lhs.mass() == rhs.mass() and
+         lhs.dimensionless_spin() == rhs.dimensionless_spin() and
+         lhs.center() == rhs.center();
 }
 
 /*!
  * \brief Return whether two harmonic Schwarzschild solutions are not equivalent
  */
-SPECTRE_ALWAYS_INLINE bool operator!=(const HarmonicSchwarzschild& lhs,
-                                      const HarmonicSchwarzschild& rhs) {
+SPECTRE_ALWAYS_INLINE bool operator!=(const HarmonicKerr& lhs,
+                                      const HarmonicKerr& rhs) {
   return not(lhs == rhs);
 }
 }  // namespace Solutions
